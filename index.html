@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Portfolio">
+<title>Portfolio</title>
+<style>
+:root{
+  --bg:#f4f6fa;--card:#fff;--ink:#0f172a;--mute:#64748b;--line:#e2e8f0;
+  --up:#15803d;--dn:#b91c1c;--buy:#1d4ed8;--sell:#c2410c;--warn:#a16207;
+  --upbg:#dcfce7;--dnbg:#fee2e2;--buybg:#dbeafe;--sellbg:#ffedd5;--chip:#eef2f7;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0b1220;--card:#131c2e;--ink:#e8edf6;--mute:#8b9ab3;--line:#22304a;
+  --up:#4ade80;--dn:#f87171;--buy:#60a5fa;--sell:#fb923c;--warn:#facc15;
+  --upbg:#12361f;--dnbg:#401a1a;--buybg:#16294d;--sellbg:#41240f;--chip:#1b2740}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding-top:env(safe-area-inset-top,0);padding-bottom:calc(64px + env(safe-area-inset-bottom,0))}
+.wrap{max-width:640px;margin:0 auto;padding:12px}
+.up{color:var(--up)}.dn{color:var(--dn)}.mute{color:var(--mute)}
+.num{font-variant-numeric:tabular-nums}
+
+/* header summary */
+.hero{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.hero-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.lbl{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:30px;font-weight:700;line-height:1.15}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.grid3>div{background:var(--chip);border-radius:10px;padding:8px 10px}
+.grid3 b{display:block;font-size:15px}
+.iconbtn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;min-width:44px;height:44px;font-size:18px}
+.iconbtn:active{opacity:.6}
+.status{font-size:12px;color:var(--mute);margin:8px 2px}
+.banner{border-radius:10px;padding:10px 12px;margin:8px 0;font-size:13px;background:var(--sellbg);color:var(--ink);border:1px solid var(--sell)}
+
+/* chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:14px;min-height:40px}
+.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tag{display:inline-block;font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--chip);color:var(--mute);margin:4px 4px 0 0}
+.tag.buy{background:var(--buybg);color:var(--buy);font-weight:600}
+.tag.sell{background:var(--sellbg);color:var(--sell);font-weight:600}
+.tag.risk{background:var(--dnbg);color:var(--dn)}
+.tag.hit{outline:2px solid currentColor;font-weight:700}
+
+/* sections & rows */
+h2{font-size:14px;margin:18px 4px 8px;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+h2 .n{background:var(--ink);color:var(--bg);border-radius:999px;font-size:12px;padding:1px 8px}
+.row{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px}
+.row.buy{border-left:5px solid var(--buy)}.row.sell{border-left:5px solid var(--sell)}
+.r1{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.tk{font-weight:700;font-size:16px}
+.nm{font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:48vw}
+.px{text-align:right}
+.px b{font-size:16px;display:block}
+.det{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
+.row.open .det{display:block}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}
+.kv span{color:var(--mute)}
+.range{position:relative;height:6px;background:var(--chip);border-radius:6px;margin:14px 0 4px}
+.range i{position:absolute;top:-4px;width:4px;height:14px;background:var(--ink);border-radius:2px}
+.rl{display:flex;justify-content:space-between;font-size:12px;color:var(--mute)}
+.det a{color:var(--buy);font-weight:600}
+.more{width:100%;padding:12px;border:1px dashed var(--line);background:none;color:var(--mute);border-radius:12px;margin-bottom:8px;font-size:14px}
+.empty{text-align:center;color:var(--mute);padding:28px 10px}
+
+/* inputs */
+input[type=search],select,input[type=url]{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px}
+.bar{height:8px;border-radius:6px;background:var(--chip);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--buy)}
+
+/* bottom nav */
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0);z-index:5}
+nav button{flex:1;border:0;background:none;color:var(--mute);padding:8px 0 6px;font-size:11px;min-height:56px}
+nav button span{display:block;font-size:20px;line-height:1.2}
+nav button.on{color:var(--ink);font-weight:700}
+nav .badge{position:absolute;margin-left:6px;background:var(--dn);color:#fff;border-radius:999px;font-size:10px;padding:0 5px;min-width:16px}
+
+/* setup overlay */
+#setup{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:10}
+#setup.show{display:flex}
+#setup .sheet{background:var(--bg);width:100%;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px calc(16px) calc(24px + env(safe-area-inset-bottom,0))}
+.sheet label{display:block;font-size:13px;margin:12px 0 4px;color:var(--mute)}
+.btn{border:0;border-radius:12px;padding:13px 16px;font-size:15px;font-weight:600;background:var(--ink);color:var(--bg);width:100%;margin-top:12px}
+.btn.alt{background:var(--chip);color:var(--ink)}
+.hint{font-size:12px;color:var(--mute);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="lbl">Portfolio value</div>
+        <div class="big num" id="hVal">–</div>
+      </div>
+      <button class="iconbtn" id="btnRefresh" aria-label="Refresh">⟳</button>
+    </div>
+    <div class="grid3">
+      <div><span class="lbl">Total P&amp;L</span><b class="num" id="hPnl">–</b></div>
+      <div><span class="lbl">Today</span><b class="num" id="hDay">–</b></div>
+      <div><span class="lbl">Invested</span><b class="num" id="hInv">–</b></div>
+    </div>
+  </div>
+  <div class="status" id="status">Loading…</div>
+  <div id="banner"></div>
+  <main id="view"></main>
+</div>
+
+<nav>
+  <button data-tab="act"><span>⚡</span>Act<i class="badge" id="bAct" hidden></i></button>
+  <button data-tab="hold"><span>📋</span>Holdings</button>
+  <button data-tab="alerts"><span>🔔</span>Alerts</button>
+  <button data-tab="more"><span>📊</span>More</button>
+</nav>
+
+<div id="setup">
+  <div class="sheet">
+    <h3 style="margin:0 0 4px">Data source</h3>
+    <div class="hint">Stored only on this phone (never sent anywhere except to Google to download your sheet).</div>
+    <label for="uData">data.csv — published Google Sheet CSV link</label>
+    <input type="url" id="uData" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv">
+    <label for="uAlerts">alerts.csv — published Google Sheet CSV link (optional)</label>
+    <input type="url" id="uAlerts" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv">
+    <div class="hint">Google Sheets → File → Share → Publish to web → pick the tab → format “CSV”.</div>
+    <button class="btn" id="saveSetup">Save &amp; load</button>
+    <label>Or load CSV files straight from this phone</label>
+    <input type="file" id="fData" accept=".csv,text/csv"> <div class="hint">data.csv</div>
+    <input type="file" id="fAlerts" accept=".csv,text/csv" style="margin-top:8px"> <div class="hint">alerts.csv</div>
+    <button class="btn alt" id="closeSetup">Close</button>
+  </div>
+</div>
+
+<script>
+/* If your page is private you may paste the two links here; otherwise use the in-app setup (safer on a public repo). */
+const DEFAULT_URLS = { data: "", alerts: "" };
+
+const LS = {
+  get(k){ try{ return localStorage.getItem(k) }catch(e){ return null } },
+  set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
+};
+const state = { stocks:[], alerts:[], tab:'act', filter:'all', q:'', sort:'value', fetchedAt:null, note:'', skipped:0, orphanAlerts:0, expanded:new Set(), showAll:{} };
+
+/* ---------- helpers ---------- */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = v => { const n = parseFloat(String(v??'').replace(/[^\d.\-]/g,'')); return isNaN(n) ? null : n; };
+const inr = n => n.toLocaleString('en-IN',{maximumFractionDigits:0});
+function money(n){ const s=n<0?'-':'', a=Math.abs(n); if(a>=1e7) return s+'₹'+(a/1e7).toFixed(2)+'Cr'; if(a>=1e5) return s+'₹'+(a/1e5).toFixed(2)+'L'; return s+'₹'+inr(a); }
+const px = n => '₹'+n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pc = n => (n>0?'+':'')+n.toFixed(1)+'%';
+const cls = n => n>0?'up':n<0?'dn':'mute';
+const arrow = n => n>0?'▲':n<0?'▼':'';
+
+function parseCSV(text){
+  const rows=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=''; }
+    else if(c==='\n'||c==='\r'){
+      if(c==='\r'&&text[i+1]==='\n') i++;
+      row.push(f); f='';
+      if(row.some(x=>x.trim()!=='')) rows.push(row);
+      row=[];
+    } else f+=c;
+  }
+  row.push(f); if(row.some(x=>x.trim()!=='')) rows.push(row);
+  if(!rows.length) return [];
+  const head = rows.shift().map(h=>h.trim().replace(/^\uFEFF/,''));
+  return rows.map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]??'').trim()])));
+}
+
+/* ---------- data load ---------- */
+function urls(){ return { data: LS.get('url_data')||DEFAULT_URLS.data, alerts: LS.get('url_alerts')||DEFAULT_URLS.alerts }; }
+
+async function download(url){
+  const u = url + (url.includes('?')?'&':'?') + 't=' + Date.now();
+  const r = await fetch(u,{cache:'no-store'});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.text();
+}
+
+async function load(){
+  const u = urls();
+  state.note='';
+  if(!u.data){ ingest(LS.get('cache_data'), LS.get('cache_alerts')); if(!state.stocks.length){ openSetup(); setStatus('Add your data source to begin.'); render(); } else { state.note='No data link set — showing last saved copy.'; state.fetchedAt=+LS.get('cache_time')||null; finish(); } return; }
+  setStatus('Refreshing…');
+  try{
+    const d = await download(u.data);
+    let a = LS.get('cache_alerts')||'';
+    if(u.alerts){ try{ a = await download(u.alerts); LS.set('cache_alerts',a);}catch(e){ state.note='Alerts sheet could not be refreshed; using last saved alerts.'; } }
+    LS.set('cache_data',d); LS.set('cache_time',String(Date.now()));
+    state.fetchedAt = Date.now(); ingest(d,a); finish();
+  }catch(e){
+    const cd = LS.get('cache_data');
+    if(cd){ state.fetchedAt = +LS.get('cache_time')||null; state.note='Offline or blocked — showing last saved data. ('+e.message+')'; ingest(cd, LS.get('cache_alerts')); finish(); }
+    else { setStatus('Could not load data: '+e.message); state.note='Check your link under More → Data source settings, or load a CSV file from your phone there.'; openSetup(); render(); }
+  }
+}
+
+function ingest(dataText, alertsText){
+  const rows = dataText ? parseCSV(dataText) : [];
+  const alertRows = alertsText ? parseCSV(alertsText) : [];
+  const amap = {};
+  alertRows.forEach(a=>{ amap[a.TICKER] = { buy:num(a['Buy Trigger Price'])||0, sell:num(a['Sell Trigger Price'])||0, lastAction:a['Last Action']||'', lastPrice:num(a['Last Price'])||0, date:a.Date||'' }; });
+  let skipped=0; const stocks=[];
+  rows.forEach(r=>{
+    const cmp=num(r.CMP);
+    if(!r.TICKER || cmp===null || cmp<=0){ skipped++; return; }
+    const qty=num(r.Quantity)||0, avg=num(r['Avg Cost Price'])||0;
+    const value=qty*cmp, cost=qty*avg;
+    const pnl = num(r['Profit/Loss']) ?? (value-cost);
+    const pnlPct = num(r['Profit/Loss(%)']) ?? (cost>0?(pnl/cost*100):0);
+    const chg=num(r.CHANGE)||0, pct=num(r.CHANGEPCT)||0;
+    const hi=num(r.HIGH52)||0, lo=num(r.LOW52)||0;
+    const al = amap[r.TICKER]||null;
+    const s = { t:r.TICKER, name:r['Stock Name']||r.TICKER, qty, avg, cmp, value, cost, pnl, pnlPct, chg, pct, hi, lo,
+      day:qty*chg, action:(r.Action||'').toUpperCase(), level:(r.LEVEL||'').toUpperCase(), sector:r['Sector Name']||'Others', al,
+      held:qty>0 };
+    s.nearHigh = hi>0 && cmp>=hi*0.95;
+    s.nearLow  = lo>0 && cmp<=lo*1.05;
+    s.big = Math.abs(pct)>=5;
+    s.sellHit = !!(al && al.sell>0 && cmp>=al.sell && qty>0);
+    s.buyHit  = !!(al && al.buy>0 && cmp<=al.buy);
+    s.rangePos = hi>lo ? Math.min(100,Math.max(0,(cmp-lo)/(hi-lo)*100)) : 50;
+    stocks.push(s);
+  });
+  const have = new Set(stocks.map(s=>s.t));
+  state.orphanAlerts = alertRows.filter(a=>a.TICKER && !have.has(a.TICKER) && ((num(a['Buy Trigger Price'])||0)>0 || (num(a['Sell Trigger Price'])||0)>0)).length;
+  state.stocks=stocks; state.skipped=skipped; state.alerts=alertRows;
+}
+
+function finish(){
+  const t = state.fetchedAt ? new Date(state.fetchedAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : 'unknown';
+  setStatus(`${state.stocks.length} stocks · fetched ${t}`);
+  render();
+}
+function setStatus(t){ document.getElementById('status').textContent=t; }
+
+/* ---------- computed ---------- */
+function totals(){
+  const held = state.stocks.filter(s=>s.held);
+  const value = held.reduce((a,s)=>a+s.value,0), cost = held.reduce((a,s)=>a+s.cost,0);
+  const pnl = held.reduce((a,s)=>a+s.pnl,0), day = held.reduce((a,s)=>a+s.day,0);
+  const prev = value-day;
+  return { value, cost, pnl, pnlPct: cost>0?pnl/cost*100:0, day, dayPct: prev>0?day/prev*100:0, count:held.length };
+}
+function sections(){
+  const S=state.stocks, held=S.filter(s=>s.held);
+  const byPct=(a,b)=>b.pct-a.pct;
+  return [
+    { k:'trig',  title:'🎯 Your triggers hit', items:S.filter(s=>s.buyHit||s.sellHit).sort((a,b)=>b.value-a.value), kind:s=>s.sellHit?'sell':'buy' },
+    { k:'sell',  title:'🟠 Sheet says SELL', items:held.filter(s=>s.action==='SELL').sort((a,b)=>b.pnlPct-a.pnlPct), kind:()=>'sell' },
+    { k:'nh',    title:'📈 Near 52-week high (held)', items:held.filter(s=>s.nearHigh && !(s.action==='SELL')).sort((a,b)=>b.pnlPct-a.pnlPct), kind:()=>'sell' },
+    { k:'buy',   title:'🔵 Sheet says BUY', items:S.filter(s=>s.action==='BUY').sort((a,b)=>a.rangePos-b.rangePos), kind:()=>'buy' },
+    { k:'nl',    title:'📉 Near 52-week low', items:S.filter(s=>s.nearLow && s.action!=='BUY').sort((a,b)=>a.rangePos-b.rangePos), kind:()=>'buy' },
+    { k:'big',   title:'⚡ Big movers today (±5%)', items:S.filter(s=>s.big).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)), kind:s=>s.pct>0?'sell':'buy' },
+  ];
+}
+function urgentCount(){ const S=state.stocks; return S.filter(s=>s.buyHit||s.sellHit).length; }
+
+/* ---------- rendering ---------- */
+function tags(s){
+  const t=[];
+  if(s.sellHit) t.push(`<span class="tag sell hit">Sell trigger ${px(s.al.sell)} hit</span>`);
+  if(s.buyHit)  t.push(`<span class="tag buy hit">Buy trigger ${px(s.al.buy)} hit</span>`);
+  if(s.action==='SELL') t.push('<span class="tag sell">Sheet: SELL</span>');
+  if(s.action==='BUY')  t.push('<span class="tag buy">Sheet: BUY</span>');
+  if(s.level==='RISK')  t.push('<span class="tag risk">RISK</span>');
+  if(s.nearHigh) t.push('<span class="tag">Near 52W high</span>');
+  if(s.nearLow)  t.push('<span class="tag">Near 52W low</span>');
+  if(s.big)      t.push(`<span class="tag">${pc(s.pct)} today</span>`);
+  if(!s.held)    t.push('<span class="tag">Watchlist</span>');
+  return t.join('');
+}
+function gf(s){ return `https://www.google.com/finance/quote/${encodeURIComponent(s.t)}:${/^\d+$/.test(s.t)?'BOM':'NSE'}`; }
+function row(s,kind){
+  const open = state.expanded.has(s.t);
+  const sub = s.held ? `<span class="mute">${s.qty} sh · P/L </span><b class="${cls(s.pnl)} num">${pc(s.pnlPct)}</b> <span class="mute">(${money(s.pnl)})</span>` : '<span class="mute">Not held</span>';
+  return `<div class="row ${kind||''} ${open?'open':''}" data-t="${esc(s.t)}">
+    <div class="r1">
+      <div style="min-width:0"><div class="tk">${esc(s.t)}</div><div class="nm">${esc(s.name)}</div></div>
+      <div class="px num"><b>${px(s.cmp)}</b><span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div>
+    </div>
+    <div style="margin-top:6px;font-size:13px">${sub}</div>
+    <div>${tags(s)}</div>
+    <div class="det">
+      <div class="kv num">
+        <div><span>Avg cost</span><br>${s.avg?px(s.avg):'–'}</div>
+        <div><span>Value</span><br>${s.held?money(s.value):'–'}</div>
+        <div><span>Today</span><br><b class="${cls(s.day)}">${s.held?money(s.day):'–'}</b></div>
+        <div><span>Sector</span><br>${esc(s.sector)}</div>
+        ${s.al&&s.al.buy>0?`<div><span>Buy trigger</span><br>${px(s.al.buy)} <small class="mute">(${pc((s.cmp-s.al.buy)/s.cmp*100)} away)</small></div>`:''}
+        ${s.al&&s.al.sell>0?`<div><span>Sell trigger</span><br>${px(s.al.sell)} <small class="mute">(${pc((s.al.sell-s.cmp)/s.cmp*100)} away)</small></div>`:''}
+      </div>
+      <div class="range"><i style="left:calc(${s.rangePos}% - 2px)"></i></div>
+      <div class="rl num"><span>52W low ${px(s.lo)}</span><span>${px(s.hi)} high</span></div>
+      <div style="margin-top:10px"><a href="${gf(s)}" target="_blank" rel="noopener">Open in Google Finance ↗</a></div>
+    </div>
+  </div>`;
+}
+
+function renderAct(){
+  if(!state.stocks.length) return '<div class="empty">No data yet.</div>';
+  const seen = new Set();
+  const secs = sections().map(sec=>({...sec, items:sec.items.filter(s=>{ if(seen.has(s.t)) return false; seen.add(s.t); return true; })})).filter(x=>x.items.length);
+  let html = secs.length ? '<div class="status" style="margin-top:0">Each stock is listed once, under its most urgent reason — tags show every reason.</div>' : '<div class="empty">✅ Nothing needs attention right now.</div>';
+  secs.forEach(sec=>{
+    const limit = 5, all = state.showAll[sec.k];
+    const shown = all ? sec.items : sec.items.slice(0,limit);
+    html += `<h2>${sec.title} <span class="n">${sec.items.length}</span></h2>`;
+    html += shown.map(s=>row(s,sec.kind(s))).join('');
+    if(sec.items.length>limit && !all) html += `<button class="more" data-more="${sec.k}">Show ${sec.items.length-limit} more</button>`;
+  });
+  return html;
+}
+
+function holdList(){
+  const f=state.filter, q=state.q.trim().toLowerCase();
+  let L = state.stocks.filter(s=>{
+    if(q && !(s.t.toLowerCase().includes(q)||s.name.toLowerCase().includes(q))) return false;
+    switch(f){
+      case 'held': return s.held; case 'watch': return !s.held;
+      case 'sell': return s.action==='SELL'; case 'buy': return s.action==='BUY';
+      case 'risk': return s.level==='RISK'; case 'loss': return s.held && s.pnl<0;
+      default: return true;
+    }
+  });
+  const sorters = { value:(a,b)=>b.value-a.value, pnlPct:(a,b)=>b.pnlPct-a.pnlPct, pnlLow:(a,b)=>a.pnlPct-b.pnlPct, day:(a,b)=>b.pct-a.pct, dayLow:(a,b)=>a.pct-b.pct, name:(a,b)=>a.t.localeCompare(b.t) };
+  L.sort(sorters[state.sort]);
+  return `<div class="status">${L.length} shown</div>` + (L.map(s=>row(s, s.action==='SELL'?'sell':s.action==='BUY'?'buy':'')).join('') || '<div class="empty">No matches.</div>');
+}
+function renderHold(){
+  const f=state.filter;
+  const F=[['all','All'],['held','Held'],['sell','SELL'],['buy','BUY'],['loss','In loss'],['risk','RISK'],['watch','Watchlist']];
+  return `<input type="search" id="q" placeholder="Search ticker or name" value="${esc(state.q)}" autocomplete="off">
+    <div class="chips" style="margin-top:8px">${F.map(([k,l])=>`<button class="chip ${f===k?'on':''}" data-f="${k}">${l}</button>`).join('')}</div>
+    <select id="sort" aria-label="Sort">
+      <option value="value">Sort: Value (high → low)</option><option value="pnlPct">P/L % (best first)</option><option value="pnlLow">P/L % (worst first)</option>
+      <option value="day">Today % (up first)</option><option value="dayLow">Today % (down first)</option><option value="name">Ticker A–Z</option>
+    </select>
+    <div id="list">${holdList()}</div>`;
+}
+
+function renderAlerts(){
+  const items = state.stocks.filter(s=>s.al && (s.al.buy>0||s.al.sell>0)).map(s=>{
+    const dBuy = s.al.buy>0 ? (s.cmp-s.al.buy)/s.cmp*100 : null;   // >0 means still above buy trigger
+    const dSell = s.al.sell>0 ? (s.al.sell-s.cmp)/s.cmp*100 : null; // >0 means still below sell trigger
+    const near = Math.min(...[dBuy,dSell].filter(x=>x!==null).map(x=>Math.max(x,0)));
+    return { s, dBuy, dSell, near, hit: s.buyHit||s.sellHit };
+  }).sort((a,b)=> (b.hit-a.hit) || (a.near-b.near));
+  if(!items.length) return '<div class="empty">No active buy/sell triggers found in your alerts sheet.</div>';
+  return `<div class="status">Sorted by closest to trigger. Triggers of 0 are ignored.</div>` + items.map(({s,dBuy,dSell,hit})=>{
+    const lines=[];
+    if(dBuy!==null) lines.push(s.buyHit?`<span class="tag buy hit">BUY hit · now ${px(s.cmp)} ≤ ${px(s.al.buy)}</span>`:`<span class="tag buy">Buy ≤ ${px(s.al.buy)} · ${dBuy.toFixed(1)}% to fall</span>`);
+    if(dSell!==null) lines.push(s.sellHit?`<span class="tag sell hit">SELL hit · now ${px(s.cmp)} ≥ ${px(s.al.sell)}</span>`:`<span class="tag sell">Sell ≥ ${px(s.al.sell)} · ${dSell.toFixed(1)}% to rise</span>`);
+    const last = (s.al.lastAction && !/^ignore$/i.test(s.al.lastAction) ? `<span class="tag">Last: ${esc(s.al.lastAction)} @ ${px(s.al.lastPrice)}</span>` : '') + (s.al.date ? `<span class="tag">Alert dated ${esc(s.al.date)}</span>` : '');
+    return `<div class="row ${hit?(s.sellHit?'sell':'buy'):''}"><div class="r1"><div><div class="tk">${esc(s.t)}</div><div class="nm">${esc(s.name)}</div></div>
+      <div class="px num"><b>${px(s.cmp)}</b><span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div></div>
+      <div>${lines.join('')}${last}</div></div>`;
+  }).join('');
+}
+
+function renderMore(){
+  const T=totals(), held=state.stocks.filter(s=>s.held);
+  const sec={}; held.forEach(s=>sec[s.sector]=(sec[s.sector]||0)+s.value);
+  const secL=Object.entries(sec).sort((a,b)=>b[1]-a[1]);
+  const risk={SAFE:0,RISK:0}; held.forEach(s=>{ if(s.level==='RISK') risk.RISK+=s.value; else risk.SAFE+=s.value; });
+  const g=[...held].sort((a,b)=>b.pct-a.pct).slice(0,5), l=[...held].sort((a,b)=>a.pct-b.pct).slice(0,5);
+  const mini = s=>`<div class="r1" style="padding:6px 0"><span><b>${esc(s.t)}</b> <span class="mute num">${px(s.cmp)}</span></span><b class="${cls(s.pct)} num">${arrow(s.pct)} ${pc(s.pct)}</b></div>`;
+  const bars = (arr,total)=>arr.map(([k,v])=>`<div style="margin:10px 0"><div class="r1"><span>${esc(k)}</span><span class="num">${(v/total*100).toFixed(1)}% · ${money(v)}</span></div><div class="bar"><i style="width:${v/total*100}%"></i></div></div>`).join('');
+  const rt=risk.SAFE+risk.RISK||1;
+  return `<h2>Top gainers today (held)</h2><div class="row">${g.map(mini).join('')}</div>
+    <h2>Top losers today (held)</h2><div class="row">${l.map(mini).join('')}</div>
+    <h2>Risk split</h2><div class="row">${bars([['SAFE',risk.SAFE],['RISK',risk.RISK]],rt)}</div>
+    <h2>Sector allocation</h2><div class="row">${bars(secL,T.value||1)}</div>
+    <h2>Data health</h2><div class="row" style="font-size:13px">
+      Rows skipped (missing/#N/A price): <b>${state.skipped}</b><br>
+      Alert triggers with no matching stock in data.csv: <b>${state.orphanAlerts}</b><br>
+      <span class="mute">Prices come from your sheet (GOOGLEFINANCE) — they can lag a few minutes and are not tick-by-tick. Confirm the live price in your broker app before placing an order.</span></div>
+    <button class="btn alt" id="openSetup">⚙ Data source settings</button>`;
+}
+
+function renderHero(){
+  const T=totals();
+  document.getElementById('hVal').textContent = money(T.value);
+  document.getElementById('hPnl').innerHTML = `<span class="${cls(T.pnl)}">${money(T.pnl)} (${pc(T.pnlPct)})</span>`;
+  document.getElementById('hDay').innerHTML = `<span class="${cls(T.day)}">${money(T.day)} (${pc(T.dayPct)})</span>`;
+  document.getElementById('hInv').textContent = money(T.cost);
+}
+
+function render(){
+  renderHero();
+  document.getElementById('banner').innerHTML = state.note ? `<div class="banner">${esc(state.note)}</div>` : '';
+  const n = urgentCount(), b=document.getElementById('bAct');
+  b.hidden = !n; b.textContent = n;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===state.tab));
+  const v=document.getElementById('view');
+  const keepScroll = window.scrollY;
+  v.innerHTML = state.tab==='act'?renderAct(): state.tab==='hold'?renderHold(): state.tab==='alerts'?renderAlerts(): renderMore();
+  const sel=document.getElementById('sort'); if(sel) sel.value=state.sort;
+  window.scrollTo(0,keepScroll);
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click',e=>{
+  const nb=e.target.closest('nav button'); if(nb){ state.tab=nb.dataset.tab; render(); window.scrollTo(0,0); return; }
+  const f=e.target.closest('[data-f]'); if(f){ state.filter=f.dataset.f; render(); return; }
+  const m=e.target.closest('[data-more]'); if(m){ state.showAll[m.dataset.more]=true; render(); return; }
+  if(e.target.closest('a')) return;
+  const r=e.target.closest('.row[data-t]'); if(r){ const t=r.dataset.t; state.expanded.has(t)?state.expanded.delete(t):state.expanded.add(t); r.classList.toggle('open'); return; }
+  if(e.target.id==='openSetup') openSetup();
+});
+document.addEventListener('input',e=>{
+  if(e.target.id==='q'){ state.q=e.target.value; document.getElementById('list').innerHTML=holdList(); }
+});
+document.addEventListener('change',e=>{ if(e.target.id==='sort'){ state.sort=e.target.value; render(); } });
+document.getElementById('btnRefresh').onclick=load;
+
+function openSetup(){ const u=urls(); document.getElementById('uData').value=u.data; document.getElementById('uAlerts').value=u.alerts; document.getElementById('setup').classList.add('show'); }
+function closeSetup(){ document.getElementById('setup').classList.remove('show'); }
+document.getElementById('closeSetup').onclick=closeSetup;
+document.getElementById('saveSetup').onclick=()=>{
+  LS.set('url_data',document.getElementById('uData').value.trim());
+  LS.set('url_alerts',document.getElementById('uAlerts').value.trim());
+  closeSetup(); load();
+};
+function fromFile(inputId,key){
+  document.getElementById(inputId).onchange=ev=>{
+    const file=ev.target.files[0]; if(!file) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ LS.set(key,rd.result); if(key==='cache_data') LS.set('cache_time',String(Date.now()));
+      state.fetchedAt=Date.now(); state.note='Loaded from a file on this phone (not live).';
+      ingest(LS.get('cache_data'),LS.get('cache_alerts')); closeSetup(); finish(); };
+    rd.readAsText(file);
+  };
+}
+fromFile('fData','cache_data'); fromFile('fAlerts','cache_alerts');
+
+/* auto-refresh when you come back to the tab after 5+ minutes */
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && state.fetchedAt && Date.now()-state.fetchedAt>5*60*1000 && urls().data) load();
+});
+load();
+</script>
+</body>
+</html>
