@@ -229,10 +229,14 @@ function ingest(dataText, alertsText){
   const alertRows = alertsText ? parseCSV(alertsText) : [];
   const amap = {};
   alertRows.forEach(a=>{ amap[a.TICKER] = { buy:num(a['Buy Trigger Price'])||0, sell:num(a['Sell Trigger Price'])||0, lastAction:a['Last Action']||'', lastPrice:num(a['Last Price'])||0, date:a.Date||'' }; });
-  let skipped=0; const stocks=[];
+  let skipped=0; const stocks=[]; const problems=[];
+  const badVal = v => v===undefined || v==='' || /^#|loading/i.test(v) || num(v)===null;
   rows.forEach(r=>{
     const cmp=num(r.CMP);
-    if(!r.TICKER || cmp===null || cmp<=0){ skipped++; return; }
+    if(!r.TICKER || cmp===null || cmp<=0){ skipped++; problems.push({t:r.TICKER||'(unnamed row)', fields:['CMP'], skipped:true}); return; }
+    const miss=['HIGH52','LOW52','CLOSEYEST','CHANGE','CHANGEPCT'].filter(k=>badVal(r[k]));
+    if((num(r.Quantity)||0)>0 && badVal(r['Avg Cost Price'])) miss.push('Avg Cost Price');
+    if(miss.length) problems.push({t:r.TICKER, fields:miss, skipped:false});
     const qty=num(r.Quantity)||0, avg=num(r['Avg Cost Price'])||0;
     const value=qty*cmp, cost=qty*avg;
     const pnl = num(r['Profit/Loss']) ?? (value-cost);
@@ -254,7 +258,8 @@ function ingest(dataText, alertsText){
     stocks.push(s);
   });
   const have = new Set(stocks.map(s=>s.t));
-  state.orphanAlerts = alertRows.filter(a=>a.TICKER && !have.has(a.TICKER) && ((num(a['Buy Trigger Price'])||0)>0 || (num(a['Sell Trigger Price'])||0)>0)).length;
+  const orphans = alertRows.filter(a=>a.TICKER && !have.has(a.TICKER) && ((num(a['Buy Trigger Price'])||0)>0 || (num(a['Sell Trigger Price'])||0)>0)).map(a=>a.TICKER);
+  state.orphanAlerts = orphans.length; state.orphanList=orphans; state.problems=problems;
   state.stocks=stocks; state.skipped=skipped; state.alerts=alertRows;
 }
 
@@ -310,7 +315,7 @@ function w52(s){
 function gf(s){ return `https://www.google.com/finance/quote/${encodeURIComponent(s.t)}:${/^\d+$/.test(s.t)?'BOM':'NSE'}`; }
 function row(s,kind){
   const open = state.expanded.has(s.t);
-  const sub = s.held ? `<span class="mute">${s.qty} sh · P/L </span><b class="${cls(s.pnl)} num">${pc(s.pnlPct)}</b> <span class="mute">(${money(s.pnl)})</span>` : '<span class="mute">Not held</span>';
+  const sub = s.held ? `<span class="mute">${s.qty} sh @ ${px(s.avg)} · P/L </span><b class="${cls(s.pnl)} num">${pc(s.pnlPct)}</b> <span class="mute">(${money(s.pnl)})</span>` : '<span class="mute">Not held</span>';
   return `<div class="row ${kind||''} ${open?'open':''}" data-t="${esc(s.t)}">
     <div class="r1">
       <div style="min-width:0"><div class="tk">${esc(s.t)}</div><div class="nm">${esc(s.name)}</div></div>
@@ -321,7 +326,6 @@ function row(s,kind){
     <div>${tags(s)}</div>
     <div class="det">
       <div class="kv num">
-        <div><span>Avg cost</span><br>${s.avg?px(s.avg):'–'}</div>
         <div><span>Value</span><br>${s.held?money(s.value):'–'}</div>
         <div><span>Today</span><br><b class="${cls(s.day)}">${s.held?money(s.day):'–'}</b></div>
         <div><span>Sector</span><br>${esc(s.sector)}</div>
@@ -401,17 +405,22 @@ function renderAlerts(){
 function renderMore(){
   const held=state.stocks.filter(s=>s.held);
   const risk={SAFE:0,RISK:0}; held.forEach(s=>{ if(s.level==='RISK') risk.RISK+=s.value; else risk.SAFE+=s.value; });
-  const g=[...held].sort((a,b)=>b.pct-a.pct).slice(0,5), l=[...held].sort((a,b)=>a.pct-b.pct).slice(0,5);
+  const g=held.filter(s=>s.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,25), l=held.filter(s=>s.pct<0).sort((a,b)=>a.pct-b.pct).slice(0,25);
   const mini = s=>`<div class="r1" style="padding:6px 0"><span><b>${esc(s.t)}</b> <span class="mute num">${px(s.cmp)}</span></span><b class="${cls(s.pct)} num">${arrow(s.pct)} ${pc(s.pct)}</b></div>`;
   const bars = (arr,total)=>arr.map(([k,v])=>`<div style="margin:10px 0"><div class="r1"><span>${esc(k)}</span><span class="num">${(v/total*100).toFixed(1)}% · ${money(v)}</span></div><div class="bar"><i style="width:${v/total*100}%"></i></div></div>`).join('');
   const rt=risk.SAFE+risk.RISK||1;
-  return `<h2>Top gainers today (held)</h2><div class="row">${g.map(mini).join('')}</div>
-    <h2>Top losers today (held)</h2><div class="row">${l.map(mini).join('')}</div>
+  const none='<div class="mute" style="padding:6px 0">None today.</div>';
+  const sk=(state.problems||[]).filter(x=>x.skipped), part=(state.problems||[]).filter(x=>!x.skipped);
+  const health = (!sk.length && !part.length && !state.orphanAlerts)
+    ? '✅ All rows look complete.'
+    : [ sk.length ? `<div>Skipped — no usable price (<b>${sk.length}</b>):<br><b>${sk.map(x=>esc(x.t)).join(', ')}</b></div>` : '',
+        part.length ? `<div style="margin-top:8px">Missing some fields (<b>${part.length}</b>):<br>${part.map(x=>`<b>${esc(x.t)}</b> <span class="mute">(${x.fields.map(esc).join(', ')})</span>`).join('<br>')}</div>` : '',
+        state.orphanAlerts ? `<div style="margin-top:8px">Alert triggers with no matching stock in data.csv (<b>${state.orphanAlerts}</b>):<br><b>${state.orphanList.map(esc).join(', ')}</b></div>` : ''
+      ].join('');
+  return `<h2>Top ${g.length||''} gainers today (held)</h2><div class="row">${g.map(mini).join('')||none}</div>
+    <h2>Top ${l.length||''} losers today (held)</h2><div class="row">${l.map(mini).join('')||none}</div>
     <h2>Risk split</h2><div class="row">${bars([['SAFE',risk.SAFE],['RISK',risk.RISK]],rt)}</div>
-    <h2>Data health</h2><div class="row" style="font-size:13px">
-      Rows skipped (missing/#N/A price): <b>${state.skipped}</b><br>
-      Alert triggers with no matching stock in data.csv: <b>${state.orphanAlerts}</b><br>
-      <span class="mute">Prices come from your sheet (GOOGLEFINANCE) — they can lag a few minutes and are not tick-by-tick. Confirm the live price in your broker app before placing an order.</span></div>
+    <h2>Data health</h2><div class="row" style="font-size:13px">${health}</div>
     <button class="btn alt" id="openSetup">⚙ Data source settings</button>`;
 }
 
