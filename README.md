@@ -13,7 +13,7 @@ No backend, no build step, no dependencies — one `index.html` hosted on GitHub
 | **⚡ Act** | Stocks needing attention, most urgent first: triggers hit, sheet SELL/BUY, near 52-week high/low, big movers |
 | **📋 Holdings** | Every stock with search, filters (Held, SELL, BUY, In loss, RISK, Watchlist) and sorting |
 | **🔔 Alerts** | All buy/sell triggers, sorted by how close the price is to each one |
-| **📊 More** | Top gainers/losers, SAFE vs RISK split, sector allocation, data health |
+| **📊 More** | Top gainers/losers today, 52-week high/low lists (within 10%), SAFE vs RISK split, data health |
 
 The header always shows portfolio value, total P&L, today's change and amount invested. Tap any stock card for quantity, average cost, 52-week range bar, trigger distances and a Google Finance link.
 
@@ -51,6 +51,8 @@ Rows with a missing or `#N/A` price are skipped (counted under *More → Data he
 - **Sheet SELL / BUY:** taken as-is from the `Action` column in `data.csv`.
 - **Near 52-week high:** price ≥ 95% of the 52-week high (held stocks only). **Near 52-week low:** price ≤ 105% of the 52-week low.
 - **Big mover:** daily change of 5% or more, up or down.
+- **Act-tab order:** SELL-type lists run from the biggest profit down to losses; BUY-type lists run from the biggest loss up to profits (by P/L %; Big movers by today's %).
+- **More tab (market-movers for your own stocks):** Top gainers and Top losers today (held stocks), plus **52-week high** and **52-week low** lists of stocks within 10% of that level, closest first. Each list shows up to 25 rows. Change `NEAR52` / `MORE_CAP` at the top of the script to adjust.
 - Each stock is listed once on the Act tab, under its most urgent reason (in the order above); its tags show every reason that applies.
 
 ## Privacy

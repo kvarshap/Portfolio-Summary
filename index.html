@@ -77,6 +77,19 @@ h2 .n{background:var(--ink);color:var(--bg);border-radius:999px;font-size:12px;p
 .more{width:100%;padding:12px;border:1px dashed var(--line);background:none;color:var(--mute);border-radius:12px;margin-bottom:8px;font-size:14px}
 .empty{text-align:center;color:var(--mute);padding:28px 10px}
 
+/* loss vs 52W table */
+.tbl .tr{display:grid;grid-template-columns:1.1fr 1fr 1.1fr 1.1fr;gap:6px;padding:8px 0;border-top:1px solid var(--line);align-items:start;font-size:13px}
+.tbl .tr.th{border-top:0;font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;padding:4px 0}
+.tbl small{display:block;font-size:11.5px;color:var(--mute);margin-top:1px}
+.tbl small.up{color:var(--up);font-weight:600}
+.tbl small.dn{color:var(--dn);font-weight:600}
+.tbl .up b{color:var(--up)}.tbl .dn b{color:var(--dn)}
+.tbl .hl{border-radius:8px;padding:2px 6px;margin:-2px -6px;font-weight:600}
+.tbl .hl small{color:inherit;font-weight:600}
+.tbl .hl.low{background:var(--buybg);color:var(--buy)}
+.tbl .hl.high{background:var(--sellbg);color:var(--sell)}
+.tbl .gh{margin:12px 0 2px;font-weight:700;font-size:13px;display:flex;gap:8px;align-items:center}
+.tbl .gh .n{background:var(--ink);color:var(--bg);border-radius:999px;font-size:11px;padding:1px 8px}
 /* inputs */
 input[type=search],select,input[type=url]{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px}
 .bar{height:8px;border-radius:6px;background:var(--chip);overflow:hidden;margin-top:6px}
@@ -148,12 +161,15 @@ nav .badge{position:absolute;margin-left:6px;background:var(--dn);color:#fff;bor
 <script>
 /* If your page is private you may paste the two links here; otherwise use the in-app setup (safer on a public repo). */
 const DEFAULT_URLS = { data: "", alerts: "" };
+const NEAR52 = 10;     // More tab: list stocks within this % of their 52-week high / low
+const MORE_CAP = 25;   // More tab: max rows per list
 
 const LS = {
   get(k){ try{ return localStorage.getItem(k) }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
 };
 const state = { stocks:[], alerts:[], tab:'act', filter:'all', q:'', sort:'name', fetchedAt:null, note:'', skipped:0, orphanAlerts:0, expanded:new Set(), showAll:{} };
+state.openMore = (()=>{ try{ const v=JSON.parse(LS.get('open_more')||'null'); if(Array.isArray(v)) return new Set(v); }catch(e){} return new Set(['m_gain','m_loss','m_high','m_low']); })();
 state.openSecs = (()=>{ try{ const v=JSON.parse(LS.get('open_secs')||'null'); if(Array.isArray(v)) return new Set(v); }catch(e){} return new Set(['trig','sell']); })();
 
 /* ---------- helpers ---------- */
@@ -280,14 +296,18 @@ function totals(){
 }
 function sections(){
   const S=state.stocks, held=S.filter(s=>s.held);
-  const byPct=(a,b)=>b.pct-a.pct;
+  // Sort rule: SELL-type lists go most positive → most negative; BUY-type lists go most negative → most positive.
+  // Key is P/L % (Big movers uses today's % since that section is about today's move).
+  const sellOrder=(key)=>(a,b)=>key(b)-key(a), buyOrder=(key)=>(a,b)=>key(a)-key(b);
+  const PL=s=>s.pnlPct, TODAY=s=>s.pct;
+  const mixed=(isSell,key)=>(a,b)=> (isSell(b)-isSell(a)) || (isSell(a)?sellOrder(key):buyOrder(key))(a,b);   // SELL-type first, then BUY-type
   return [
-    { k:'trig',  title:'🎯 Your triggers hit', items:S.filter(s=>s.buyHit||s.sellHit).sort((a,b)=>b.value-a.value), kind:s=>s.sellHit?'sell':'buy' },
-    { k:'sell',  title:'🟠 Sheet says SELL', items:held.filter(s=>s.action==='SELL').sort((a,b)=>b.pnlPct-a.pnlPct), kind:()=>'sell' },
-    { k:'nh',    title:'📈 Near 52-week high (held)', items:held.filter(s=>s.nearHigh && !(s.action==='SELL')).sort((a,b)=>b.pnlPct-a.pnlPct), kind:()=>'sell' },
-    { k:'buy',   title:'🔵 Sheet says BUY', items:S.filter(s=>s.action==='BUY').sort((a,b)=>a.rangePos-b.rangePos), kind:()=>'buy' },
-    { k:'nl',    title:'📉 Near 52-week low', items:S.filter(s=>s.nearLow && s.action!=='BUY').sort((a,b)=>a.rangePos-b.rangePos), kind:()=>'buy' },
-    { k:'big',   title:'⚡ Big movers today (±5%)', items:S.filter(s=>s.big).sort((a,b)=>Math.abs(b.pct)-Math.abs(a.pct)), kind:s=>s.pct>0?'sell':'buy' },
+    { k:'trig',  title:'🎯 Your triggers hit', items:S.filter(s=>s.buyHit||s.sellHit).sort(mixed(s=>s.sellHit?1:0,PL)), kind:s=>s.sellHit?'sell':'buy' },
+    { k:'sell',  title:'🟠 Sheet says SELL', items:held.filter(s=>s.action==='SELL').sort(sellOrder(PL)), kind:()=>'sell' },
+    { k:'nh',    title:'📈 Near 52-week high (held)', items:held.filter(s=>s.nearHigh && !(s.action==='SELL')).sort(sellOrder(PL)), kind:()=>'sell' },
+    { k:'buy',   title:'🔵 Sheet says BUY', items:S.filter(s=>s.action==='BUY').sort(buyOrder(PL)), kind:()=>'buy' },
+    { k:'nl',    title:'📉 Near 52-week low', items:S.filter(s=>s.nearLow && s.action!=='BUY').sort(buyOrder(PL)), kind:()=>'buy' },
+    { k:'big',   title:'⚡ Big movers today (±5%)', items:S.filter(s=>s.big).sort(mixed(s=>s.pct>0?1:0,TODAY)), kind:s=>s.pct>0?'sell':'buy' },
   ];
 }
 function urgentCount(){ const S=state.stocks; return S.filter(s=>s.buyHit||s.sellHit).length; }
@@ -402,14 +422,42 @@ function renderAlerts(){
   }).join('');
 }
 
+function moreSection(k,title,total,bodyHtml){
+  const open=state.openMore.has(k);
+  return `<h2 class="sec" data-msec="${k}" role="button" tabindex="0" aria-expanded="${open}"><span class="chev">${open?'▾':'▸'}</span>${title} <span class="n">${total}</span></h2>`+(open?bodyHtml:'');
+}
+function capNote(total){ return total>MORE_CAP ? `<div class="mute" style="font-size:12px;margin-top:8px">Showing ${MORE_CAP} of ${total}</div>` : ''; }
+function moverTable(list,emptyMsg){
+  if(!list.length) return `<div class="row tbl"><div class="mute">${emptyMsg}</div></div>`;
+  const r=s=>`<div class="tr">
+      <div><b>${esc(s.t)}</b><small>${s.qty} sh</small></div>
+      <div class="num"><b>${px(s.cmp)}</b></div>
+      <div class="num ${cls(s.pct)}"><b>${arrow(s.pct)} ${pc(s.pct)}</b><small class="${cls(s.day)}">${money(s.day)}</small></div>
+      <div class="num ${cls(s.pnl)}"><b>${pc(s.pnlPct)}</b><small class="${cls(s.pnl)}">${money(s.pnl)}</small></div>
+    </div>`;
+  return `<div class="row tbl"><div class="tr th"><div>Stock</div><div>CMP</div><div>Today</div><div>P/L</div></div>${list.slice(0,MORE_CAP).map(r).join('')}${capNote(list.length)}</div>`;
+}
+function rangeTable(list,mode){
+  const word=mode==='high'?'high':'low';
+  if(!list.length) return `<div class="row tbl"><div class="mute">None within ${NEAR52}% of their 52-week ${word}.</div></div>`;
+  const r=s=>`<div class="tr">
+      <div><b>${esc(s.t)}</b>${s.held?`<small class="${cls(s.pnl)}">${pc(s.pnlPct)}</small>`:'<small>watchlist</small>'}</div>
+      <div class="num"><b>${px(s.cmp)}</b></div>
+      <div class="num ${mode==='low'?'hl low':''}">${s.lo?px(s.lo):'–'}<small>${s.fromLow===null?'':(s.fromLow<0.05?'at low':'+'+s.fromLow.toFixed(1)+'%')}</small></div>
+      <div class="num ${mode==='high'?'hl high':''}">${s.hi?px(s.hi):'–'}<small>${s.fromHigh===null?'':(s.fromHigh>-0.05?'at high':s.fromHigh.toFixed(1)+'%')}</small></div>
+    </div>`;
+  return `<div class="row tbl"><div class="mute" style="font-size:12px;margin-bottom:6px">Within ${NEAR52}% of the 52-week ${word}, closest first. P/L % under each ticker.</div>
+    <div class="tr th"><div>Stock</div><div>CMP</div><div>52W low</div><div>52W high</div></div>${list.slice(0,MORE_CAP).map(r).join('')}${capNote(list.length)}</div>`;
+}
 function renderMore(){
-  const held=state.stocks.filter(s=>s.held);
+  const S=state.stocks, held=S.filter(s=>s.held);
   const risk={SAFE:0,RISK:0}; held.forEach(s=>{ if(s.level==='RISK') risk.RISK+=s.value; else risk.SAFE+=s.value; });
-  const g=held.filter(s=>s.pct>0).sort((a,b)=>b.pct-a.pct).slice(0,25), l=held.filter(s=>s.pct<0).sort((a,b)=>a.pct-b.pct).slice(0,25);
-  const mini = s=>`<div class="r1" style="padding:6px 0"><span><b>${esc(s.t)}</b> <span class="mute num">${px(s.cmp)}</span></span><b class="${cls(s.pct)} num">${arrow(s.pct)} ${pc(s.pct)}</b></div>`;
+  const gain=held.filter(s=>s.pct>0).sort((a,b)=>b.pct-a.pct);
+  const loss=held.filter(s=>s.pct<0).sort((a,b)=>a.pct-b.pct);
+  const nearHi=S.filter(s=>s.fromHigh!==null && s.fromHigh>=-NEAR52).sort((a,b)=>b.fromHigh-a.fromHigh);
+  const nearLo=S.filter(s=>s.fromLow!==null && s.fromLow<=NEAR52).sort((a,b)=>a.fromLow-b.fromLow);
   const bars = (arr,total)=>arr.map(([k,v])=>`<div style="margin:10px 0"><div class="r1"><span>${esc(k)}</span><span class="num">${(v/total*100).toFixed(1)}% · ${money(v)}</span></div><div class="bar"><i style="width:${v/total*100}%"></i></div></div>`).join('');
   const rt=risk.SAFE+risk.RISK||1;
-  const none='<div class="mute" style="padding:6px 0">None today.</div>';
   const sk=(state.problems||[]).filter(x=>x.skipped), part=(state.problems||[]).filter(x=>!x.skipped);
   const health = (!sk.length && !part.length && !state.orphanAlerts)
     ? '✅ All rows look complete.'
@@ -417,9 +465,11 @@ function renderMore(){
         part.length ? `<div style="margin-top:8px">Missing some fields (<b>${part.length}</b>):<br>${part.map(x=>`<b>${esc(x.t)}</b> <span class="mute">(${x.fields.map(esc).join(', ')})</span>`).join('<br>')}</div>` : '',
         state.orphanAlerts ? `<div style="margin-top:8px">Alert triggers with no matching stock in data.csv (<b>${state.orphanAlerts}</b>):<br><b>${state.orphanList.map(esc).join(', ')}</b></div>` : ''
       ].join('');
-  return `<h2>Top ${g.length||''} gainers today (held)</h2><div class="row">${g.map(mini).join('')||none}</div>
-    <h2>Top ${l.length||''} losers today (held)</h2><div class="row">${l.map(mini).join('')||none}</div>
-    <h2>Risk split</h2><div class="row">${bars([['SAFE',risk.SAFE],['RISK',risk.RISK]],rt)}</div>
+  return moreSection('m_gain','📈 Top gainers today (held)',gain.length,moverTable(gain,'No holdings are up today.'))
+    + moreSection('m_loss','📉 Top losers today (held)',loss.length,moverTable(loss,'No holdings are down today.'))
+    + moreSection('m_high','🔺 52-week high · within '+NEAR52+'%',nearHi.length,rangeTable(nearHi,'high'))
+    + moreSection('m_low','🔻 52-week low · within '+NEAR52+'%',nearLo.length,rangeTable(nearLo,'low'))
+    + `<h2>Risk split</h2><div class="row">${bars([['SAFE',risk.SAFE],['RISK',risk.RISK]],rt)}</div>
     <h2>Data health</h2><div class="row" style="font-size:13px">${health}</div>
     <button class="btn alt" id="openSetup">⚙ Data source settings</button>`;
 }
@@ -450,12 +500,13 @@ document.addEventListener('click',e=>{
   const nb=e.target.closest('nav button'); if(nb){ state.tab=nb.dataset.tab; render(); window.scrollTo(0,0); return; }
   const f=e.target.closest('[data-f]'); if(f){ state.filter=f.dataset.f; render(); return; }
   const sh=e.target.closest('[data-sec]'); if(sh){ const k=sh.dataset.sec; state.openSecs.has(k)?state.openSecs.delete(k):state.openSecs.add(k); LS.set('open_secs',JSON.stringify([...state.openSecs])); render(); return; }
+  const ms=e.target.closest('[data-msec]'); if(ms){ const k=ms.dataset.msec; state.openMore.has(k)?state.openMore.delete(k):state.openMore.add(k); LS.set('open_more',JSON.stringify([...state.openMore])); render(); return; }
   const m=e.target.closest('[data-more]'); if(m){ state.showAll[m.dataset.more]=true; render(); return; }
   if(e.target.closest('a')) return;
   const r=e.target.closest('.row[data-t]'); if(r){ const t=r.dataset.t; state.expanded.has(t)?state.expanded.delete(t):state.expanded.add(t); r.classList.toggle('open'); return; }
   if(e.target.id==='openSetup') openSetup();
 });
-document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('[data-sec]')){ e.preventDefault(); e.target.click(); } });
+document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('[data-sec],[data-msec]')){ e.preventDefault(); e.target.click(); } });
 document.addEventListener('input',e=>{
   if(e.target.id==='q'){ state.q=e.target.value; document.getElementById('list').innerHTML=holdList(); }
 });
