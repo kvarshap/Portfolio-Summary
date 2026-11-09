@@ -1,0 +1,6 @@
+# Never commit portfolio data or secrets to this public repo
+data.csv
+alerts.csv
+*.csv
+*.csv.bak
+.env
