@@ -27,6 +27,7 @@ Google Sheet ──(Publish to web, CSV)──▶ phone browser ──▶ index.
 
 - `data.csv` is the source of truth. The page only reads it; it never writes back.
 - The last successful download is cached in the phone's `localStorage`, so the page still opens offline (with a banner saying the data is old).
+- **When it fetches:** only when the page is opened and when you tap ⟳ (at most once every 5 minutes). There is no background polling or timed refresh. Each fetch is two small requests, one per sheet.
 - Sheet links are **not** stored in this repo. They are pasted once in the page's settings and kept only in that browser.
 
 ## Setup

@@ -56,6 +56,8 @@ body{padding-top:env(safe-area-inset-top,0);padding-bottom:calc(64px + env(safe-
 
 /* sections & rows */
 h2{font-size:14px;margin:18px 4px 8px;display:flex;align-items:center;gap:8px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+h2.sec{cursor:pointer;user-select:none;min-height:44px;margin:8px 4px 4px}
+h2 .chev{width:14px;display:inline-block;color:var(--ink)}
 h2 .n{background:var(--ink);color:var(--bg);border-radius:999px;font-size:12px;padding:1px 8px}
 .row{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px}
 .row.buy{border-left:5px solid var(--buy)}.row.sell{border-left:5px solid var(--sell)}
@@ -134,6 +136,7 @@ nav .badge{position:absolute;margin-left:6px;background:var(--dn);color:#fff;bor
     <label for="uAlerts">alerts.csv — published Google Sheet CSV link (optional)</label>
     <input type="url" id="uAlerts" placeholder="https://docs.google.com/spreadsheets/d/e/…/pub?output=csv">
     <div class="hint">Google Sheets → File → Share → Publish to web → pick the tab → format “CSV”.</div>
+    <div class="banner" id="setupMsg" hidden></div>
     <button class="btn" id="saveSetup">Save &amp; load</button>
     <label>Or load CSV files straight from this phone</label>
     <input type="file" id="fData" accept=".csv,text/csv"> <div class="hint">data.csv</div>
@@ -150,7 +153,8 @@ const LS = {
   get(k){ try{ return localStorage.getItem(k) }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
 };
-const state = { stocks:[], alerts:[], tab:'act', filter:'all', q:'', sort:'value', fetchedAt:null, note:'', skipped:0, orphanAlerts:0, expanded:new Set(), showAll:{} };
+const state = { stocks:[], alerts:[], tab:'act', filter:'all', q:'', sort:'name', fetchedAt:null, note:'', skipped:0, orphanAlerts:0, expanded:new Set(), showAll:{} };
+state.openSecs = (()=>{ try{ const v=JSON.parse(LS.get('open_secs')||'null'); if(Array.isArray(v)) return new Set(v); }catch(e){} return new Set(['trig','sell']); })();
 
 /* ---------- helpers ---------- */
 const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -158,7 +162,7 @@ const num = v => { const n = parseFloat(String(v??'').replace(/[^\d.\-]/g,'')); 
 const inr = n => n.toLocaleString('en-IN',{maximumFractionDigits:0});
 function money(n){ const s=n<0?'-':'', a=Math.abs(n); if(a>=1e7) return s+'₹'+(a/1e7).toFixed(2)+'Cr'; if(a>=1e5) return s+'₹'+(a/1e5).toFixed(2)+'L'; return s+'₹'+inr(a); }
 const px = n => '₹'+n.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
-const pc = n => (n>0?'+':'')+n.toFixed(1)+'%';
+const pc = n => Math.abs(n)<0.05 ? '0.0%' : (n>0?'+':'')+n.toFixed(1)+'%';
 const cls = n => n>0?'up':n<0?'dn':'mute';
 const arrow = n => n>0?'▲':n<0?'▼':'';
 
@@ -183,19 +187,29 @@ function parseCSV(text){
 }
 
 /* ---------- data load ---------- */
+const isEditLink = u => /docs\.google\.com\/spreadsheets\/d\/[^\/]+\/(edit|view|htmlview)|docs\.google\.com\/spreadsheets\/d\/[^\/]+\/?$/.test(u||'');
+const EDIT_MSG = 'That is a Google Sheets edit/share link, not a published CSV link. In the sheet: File → Share → Publish to web → choose the tab → format CSV → Publish, then paste that link (it contains “/pub?output=csv”).';
 function urls(){ return { data: LS.get('url_data')||DEFAULT_URLS.data, alerts: LS.get('url_alerts')||DEFAULT_URLS.alerts }; }
 
 async function download(url){
+  if(isEditLink(url)) throw new Error(EDIT_MSG);
   const u = url + (url.includes('?')?'&':'?') + 't=' + Date.now();
   const r = await fetch(u,{cache:'no-store'});
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.text();
 }
 
+let loading=false, lastAttempt=0;
 async function load(){
+  if(loading) return;                       // never run two downloads at once
+  loading=true; const btn=document.getElementById('btnRefresh'); btn.disabled=true; btn.style.opacity='.5';
+  try{ await _load(); } finally { loading=false; btn.disabled=false; btn.style.opacity=''; }
+}
+async function _load(){
   const u = urls();
   state.note='';
   if(!u.data){ ingest(LS.get('cache_data'), LS.get('cache_alerts')); if(!state.stocks.length){ openSetup(); setStatus('Add your data source to begin.'); render(); } else { state.note='No data link set — showing last saved copy.'; state.fetchedAt=+LS.get('cache_time')||null; finish(); } return; }
+  lastAttempt=Date.now();
   setStatus('Refreshing…');
   try{
     const d = await download(u.data);
@@ -206,7 +220,7 @@ async function load(){
   }catch(e){
     const cd = LS.get('cache_data');
     if(cd){ state.fetchedAt = +LS.get('cache_time')||null; state.note='Offline or blocked — showing last saved data. ('+e.message+')'; ingest(cd, LS.get('cache_alerts')); finish(); }
-    else { setStatus('Could not load data: '+e.message); state.note='Check your link under More → Data source settings, or load a CSV file from your phone there.'; openSetup(); render(); }
+    else { setStatus('Could not load data.'); state.note = e.message===EDIT_MSG ? EDIT_MSG : 'Could not load data ('+e.message+'). Check your link under More → Data source settings, or load a CSV file from your phone there.'; openSetup(); render(); }
   }
 }
 
@@ -234,6 +248,8 @@ function ingest(dataText, alertsText){
     s.big = Math.abs(pct)>=5;
     s.sellHit = !!(al && al.sell>0 && cmp>=al.sell && qty>0);
     s.buyHit  = !!(al && al.buy>0 && cmp<=al.buy);
+    s.fromHigh = hi>0 ? Math.min(0,(cmp-hi)/hi*100) : null;   // 0 or negative: how far below the 52W high
+    s.fromLow  = lo>0 ? Math.max(0,(cmp-lo)/lo*100) : null;   // 0 or positive: how far above the 52W low
     s.rangePos = hi>lo ? Math.min(100,Math.max(0,(cmp-lo)/(hi-lo)*100)) : 50;
     stocks.push(s);
   });
@@ -285,6 +301,12 @@ function tags(s){
   if(!s.held)    t.push('<span class="tag">Watchlist</span>');
   return t.join('');
 }
+function w52(s){
+  const a = s.fromHigh===null ? '' : (s.fromHigh>-0.05 ? 'at 52W high' : `<b>${s.fromHigh.toFixed(1)}%</b> from 52W high`);
+  const b = s.fromLow===null ? '' : (s.fromLow<0.05 ? 'at 52W low' : `<b>+${s.fromLow.toFixed(1)}%</b> above 52W low`);
+  const t=[a,b].filter(Boolean).join(' · ');
+  return t ? `<div class="mute num" style="margin-top:4px;font-size:12px">${t}</div>` : '';
+}
 function gf(s){ return `https://www.google.com/finance/quote/${encodeURIComponent(s.t)}:${/^\d+$/.test(s.t)?'BOM':'NSE'}`; }
 function row(s,kind){
   const open = state.expanded.has(s.t);
@@ -295,6 +317,7 @@ function row(s,kind){
       <div class="px num"><b>${px(s.cmp)}</b><span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div>
     </div>
     <div style="margin-top:6px;font-size:13px">${sub}</div>
+    ${w52(s)}
     <div>${tags(s)}</div>
     <div class="det">
       <div class="kv num">
@@ -320,7 +343,9 @@ function renderAct(){
   secs.forEach(sec=>{
     const limit = 5, all = state.showAll[sec.k];
     const shown = all ? sec.items : sec.items.slice(0,limit);
-    html += `<h2>${sec.title} <span class="n">${sec.items.length}</span></h2>`;
+    const open = state.openSecs.has(sec.k);
+    html += `<h2 class="sec" data-sec="${sec.k}" role="button" tabindex="0" aria-expanded="${open}"><span class="chev">${open?'▾':'▸'}</span>${sec.title} <span class="n">${sec.items.length}</span></h2>`;
+    if(!open) return;
     html += shown.map(s=>row(s,sec.kind(s))).join('');
     if(sec.items.length>limit && !all) html += `<button class="more" data-more="${sec.k}">Show ${sec.items.length-limit} more</button>`;
   });
@@ -348,8 +373,8 @@ function renderHold(){
   return `<input type="search" id="q" placeholder="Search ticker or name" value="${esc(state.q)}" autocomplete="off">
     <div class="chips" style="margin-top:8px">${F.map(([k,l])=>`<button class="chip ${f===k?'on':''}" data-f="${k}">${l}</button>`).join('')}</div>
     <select id="sort" aria-label="Sort">
-      <option value="value">Sort: Value (high → low)</option><option value="pnlPct">P/L % (best first)</option><option value="pnlLow">P/L % (worst first)</option>
-      <option value="day">Today % (up first)</option><option value="dayLow">Today % (down first)</option><option value="name">Ticker A–Z</option>
+      <option value="name">Sort: Ticker A–Z</option><option value="value">Value (high → low)</option><option value="pnlPct">P/L % (best first)</option><option value="pnlLow">P/L % (worst first)</option>
+      <option value="day">Today % (up first)</option><option value="dayLow">Today % (down first)</option>
     </select>
     <div id="list">${holdList()}</div>`;
 }
@@ -374,9 +399,7 @@ function renderAlerts(){
 }
 
 function renderMore(){
-  const T=totals(), held=state.stocks.filter(s=>s.held);
-  const sec={}; held.forEach(s=>sec[s.sector]=(sec[s.sector]||0)+s.value);
-  const secL=Object.entries(sec).sort((a,b)=>b[1]-a[1]);
+  const held=state.stocks.filter(s=>s.held);
   const risk={SAFE:0,RISK:0}; held.forEach(s=>{ if(s.level==='RISK') risk.RISK+=s.value; else risk.SAFE+=s.value; });
   const g=[...held].sort((a,b)=>b.pct-a.pct).slice(0,5), l=[...held].sort((a,b)=>a.pct-b.pct).slice(0,5);
   const mini = s=>`<div class="r1" style="padding:6px 0"><span><b>${esc(s.t)}</b> <span class="mute num">${px(s.cmp)}</span></span><b class="${cls(s.pct)} num">${arrow(s.pct)} ${pc(s.pct)}</b></div>`;
@@ -385,7 +408,6 @@ function renderMore(){
   return `<h2>Top gainers today (held)</h2><div class="row">${g.map(mini).join('')}</div>
     <h2>Top losers today (held)</h2><div class="row">${l.map(mini).join('')}</div>
     <h2>Risk split</h2><div class="row">${bars([['SAFE',risk.SAFE],['RISK',risk.RISK]],rt)}</div>
-    <h2>Sector allocation</h2><div class="row">${bars(secL,T.value||1)}</div>
     <h2>Data health</h2><div class="row" style="font-size:13px">
       Rows skipped (missing/#N/A price): <b>${state.skipped}</b><br>
       Alert triggers with no matching stock in data.csv: <b>${state.orphanAlerts}</b><br>
@@ -418,23 +440,32 @@ function render(){
 document.addEventListener('click',e=>{
   const nb=e.target.closest('nav button'); if(nb){ state.tab=nb.dataset.tab; render(); window.scrollTo(0,0); return; }
   const f=e.target.closest('[data-f]'); if(f){ state.filter=f.dataset.f; render(); return; }
+  const sh=e.target.closest('[data-sec]'); if(sh){ const k=sh.dataset.sec; state.openSecs.has(k)?state.openSecs.delete(k):state.openSecs.add(k); LS.set('open_secs',JSON.stringify([...state.openSecs])); render(); return; }
   const m=e.target.closest('[data-more]'); if(m){ state.showAll[m.dataset.more]=true; render(); return; }
   if(e.target.closest('a')) return;
   const r=e.target.closest('.row[data-t]'); if(r){ const t=r.dataset.t; state.expanded.has(t)?state.expanded.delete(t):state.expanded.add(t); r.classList.toggle('open'); return; }
   if(e.target.id==='openSetup') openSetup();
 });
+document.addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ') && e.target.matches && e.target.matches('[data-sec]')){ e.preventDefault(); e.target.click(); } });
 document.addEventListener('input',e=>{
   if(e.target.id==='q'){ state.q=e.target.value; document.getElementById('list').innerHTML=holdList(); }
 });
 document.addEventListener('change',e=>{ if(e.target.id==='sort'){ state.sort=e.target.value; render(); } });
-document.getElementById('btnRefresh').onclick=load;
+document.getElementById('btnRefresh').onclick=()=>{
+  const wait = 5*60*1000 - (Date.now()-lastAttempt);
+  if(wait>0){ setStatus(`Refreshed recently — you can refresh again in ${Math.ceil(wait/60000)} min.`); setTimeout(()=>{ if(!loading && state.stocks.length) finish(); },3500); return; }
+  load();
+};
 
 function openSetup(){ const u=urls(); document.getElementById('uData').value=u.data; document.getElementById('uAlerts').value=u.alerts; document.getElementById('setup').classList.add('show'); }
 function closeSetup(){ document.getElementById('setup').classList.remove('show'); }
 document.getElementById('closeSetup').onclick=closeSetup;
 document.getElementById('saveSetup').onclick=()=>{
-  LS.set('url_data',document.getElementById('uData').value.trim());
-  LS.set('url_alerts',document.getElementById('uAlerts').value.trim());
+  const d=document.getElementById('uData').value.trim(), a=document.getElementById('uAlerts').value.trim();
+  const msg=document.getElementById('setupMsg');
+  if(isEditLink(d)||isEditLink(a)){ msg.textContent=EDIT_MSG; msg.hidden=false; return; }
+  msg.hidden=true;
+  LS.set('url_data',d); LS.set('url_alerts',a);
   closeSetup(); load();
 };
 function fromFile(inputId,key){
@@ -449,10 +480,6 @@ function fromFile(inputId,key){
 }
 fromFile('fData','cache_data'); fromFile('fAlerts','cache_alerts');
 
-/* auto-refresh when you come back to the tab after 5+ minutes */
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible' && state.fetchedAt && Date.now()-state.fetchedAt>5*60*1000 && urls().data) load();
-});
 load();
 </script>
 </body>
