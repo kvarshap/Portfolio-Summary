@@ -13,9 +13,9 @@ No backend, no build step, no dependencies — one `index.html` hosted on GitHub
 | **⚡ Act** | Stocks needing attention, most urgent first: triggers hit, sheet SELL/BUY, near 52-week high/low, big movers |
 | **📋 Holdings** | Every stock with search, filters (Held, SELL, BUY, In loss, RISK, Watchlist) and sorting |
 | **🔔 Alerts** | All buy/sell triggers, sorted by how close the price is to each one |
-| **📊 More** | Top gainers/losers today, 52-week high/low lists (within 10%), SAFE vs RISK split, data health |
+| **📊 More** | Top gainers/losers today, 52-week high/low lists (within 10%), SAFE vs RISK split, data health (including excluded rows) |
 
-The header always shows portfolio value, total P&L, today's change and amount invested. Tap any stock card for quantity, average cost, 52-week range bar, trigger distances and a Google Finance link.
+The header always shows portfolio value, total P&L, today's change and amount invested. Stock prices show CMP, average price and share count. Tap any stock card for 52-week range, trigger distances and a Google Finance link.
 
 ## How it works
 
@@ -40,8 +40,8 @@ Google Sheet ──(Publish to web, CSV)──▶ phone browser ──▶ index.
 ## Sheet format
 
 **data.csv** — required columns: `TICKER`, `Stock Name`, `Quantity`, `Avg Cost Price`, `CMP`.
-Also used when present: `Profit/Loss`, `Profit/Loss(%)`, `HIGH52`, `LOW52`, `CLOSEYEST`, `CHANGE`, `CHANGEPCT`, `Action`, `LEVEL` (`SAFE`/`RISK`), `Sector Name`.
-Rows with a missing or `#N/A` price are skipped (counted under *More → Data health*). `Quantity = 0` means watchlist.
+Also used when present: `Include` (boolean; `FALSE` excludes the row from analysis and listings; blank or missing means included), `Profit/Loss`, `Profit/Loss(%)`, `HIGH52`, `LOW52`, `CLOSEYEST`, `CHANGE`, `CHANGEPCT`, `Action`, `LEVEL` (`SAFE`/`RISK`), `Sector Name`.
+Rows with `Include = FALSE` are listed under *More → Data health*. Included rows with a missing or `#N/A` price are skipped there as well. `Quantity = 0` means watchlist.
 
 **alerts.csv** — columns: `TICKER`, `Date`, `Buy Trigger Price`, `Sell Trigger Price`, `Last Action`, `Last Price`. A trigger of `0` means "not set".
 
@@ -67,7 +67,7 @@ Rows with a missing or `#N/A` price are skipped (counted under *More → Data he
 |---|---|
 | "Failed to fetch" / banner says offline or blocked | Check the link under *More → Data source settings*; make sure the sheet is published as **CSV**, not as a web page. As a fallback, load the CSV files from the phone in the same settings sheet. |
 | Numbers look old | Tap ⟳. Google refreshes published sheets only every few minutes, and `GOOGLEFINANCE` prices can lag. |
-| A stock is missing | Its row has an empty or `#N/A` price in `data.csv`. See *More → Data health*. |
+| A stock is missing | Check whether `Include` is `FALSE` or its row has an empty or `#N/A` price in `data.csv`. See *More → Data health*. |
 | Alert never fires | Trigger of `0` is ignored, and alert tickers must match `data.csv` exactly. |
 
 ## Local testing
