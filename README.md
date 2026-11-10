@@ -10,12 +10,12 @@ No backend, no build step, no dependencies — one `index.html` hosted on GitHub
 
 | Tab | Purpose |
 |---|---|
-| **⚡ Act** | Stocks needing attention, most urgent first: triggers hit, sheet SELL/BUY, near 52-week high/low, big movers |
+| **🏠 Home** (default) | Top gainers/losers today, 52-week high/low lists (within 10%), excluded & no-price stocks, SAFE vs RISK split, data health |
 | **📋 Holdings** | Every stock with search, filters (Held, SELL, BUY, In loss, RISK, Watchlist) and sorting |
-| **🔔 Alerts** | All buy/sell triggers, sorted by how close the price is to each one |
-| **📊 More** | Top gainers/losers today, 52-week high/low lists (within 10%), SAFE vs RISK split, data health (including excluded rows) |
+| **⚡ Act** | Stocks needing attention, most urgent first: triggers hit, sheet SELL/BUY, near 52-week high/low, big movers |
+| **🔔 Alerts** | All buy/sell triggers by closeness to trigger, plus ⚙ data-source settings |
 
-The header always shows portfolio value, total P&L, today's change and amount invested. Stock prices show CMP, average price and share count. Tap any stock card for 52-week range, trigger distances and a Google Finance link.
+The header always shows portfolio value, total P&L, today's change and amount invested. Stock cards show CMP, average price and share count. Tap any stock card for 52-week range, trigger distances and a Google Finance link.
 
 ## How it works
 
@@ -34,14 +34,15 @@ Google Sheet ──(Publish to web, CSV)──▶ phone browser ──▶ index.
 
 1. **Publish the sheets.** In Google Sheets: *File → Share → Publish to web* → choose the tab → format **CSV** → Publish. Do this for the data tab and (optionally) the alerts tab. Copy both links.
 2. **Enable GitHub Pages.** Repo *Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: `main`, folder `/ (root)` → Save*. After a minute or two the site is live at `https://<username>.github.io/Portfolio-Summary/`.
-3. **Open the site on your phone** and paste the two links when the settings sheet appears (reachable later at *More → Data source settings*).
+3. **Open the site on your phone** and paste the two links when the settings sheet appears (reachable later at *Alerts → Data source settings*).
 4. **Add to Home Screen** (iOS: Share → Add to Home Screen; Android Chrome: ⋮ → Add to Home screen).
 
 ## Sheet format
 
 **data.csv** — required columns: `TICKER`, `Stock Name`, `Quantity`, `Avg Cost Price`, `CMP`.
-Also used when present: `Include` (boolean; `FALSE` excludes the row from analysis and listings; blank or missing means included), `Profit/Loss`, `Profit/Loss(%)`, `HIGH52`, `LOW52`, `CLOSEYEST`, `CHANGE`, `CHANGEPCT`, `Action`, `LEVEL` (`SAFE`/`RISK`), `Sector Name`.
-Rows with `Include = FALSE` are listed under *More → Data health*. Included rows with a missing or `#N/A` price are skipped there as well. `Quantity = 0` means watchlist.
+Also used when present: `Include`, `Profit/Loss`, `Profit/Loss(%)`, `HIGH52`, `LOW52`, `CLOSEYEST`, `CHANGE`, `CHANGEPCT`, `Action`, `LEVEL` (`SAFE`/`RISK`), `Sector Name`.
+**`Include` (optional; a tick box, or `1`/`0`):** rows marked `0`, `FALSE`, `No` or `N` are left out of every list and signal, and are only shown in the *Excluded & no price* table on Home. `1`, `TRUE`, a blank cell or no such column means included. Alerts for excluded tickers are ignored. Excluded holdings **still count in the header totals (value, P&L, today, invested) and the risk split**; everything else (gainers/losers, 52-week lists, Act, Holdings, Alerts) ignores them.
+Rows with a missing or `#N/A` price are shown with `-` in the same table. `Quantity = 0` means watchlist.
 
 **alerts.csv** — columns: `TICKER`, `Date`, `Buy Trigger Price`, `Sell Trigger Price`, `Last Action`, `Last Price`. A trigger of `0` means "not set".
 
@@ -52,7 +53,7 @@ Rows with `Include = FALSE` are listed under *More → Data health*. Included ro
 - **Near 52-week high:** price ≥ 95% of the 52-week high (held stocks only). **Near 52-week low:** price ≤ 105% of the 52-week low.
 - **Big mover:** daily change of 5% or more, up or down.
 - **Act-tab order:** SELL-type lists run from the biggest profit down to losses; BUY-type lists run from the biggest loss up to profits (by P/L %; Big movers by today's %).
-- **More tab (market-movers for your own stocks):** Top gainers and Top losers today (held stocks), plus **52-week high** and **52-week low** lists of stocks within 10% of that level, closest first. Each list shows up to 25 rows. Change `NEAR52` / `MORE_CAP` at the top of the script to adjust.
+- **Home tab (market-movers for your own stocks):** Top gainers and Top losers today (held stocks, up to 25 rows each), plus **52-week high** and **52-week low** lists of every stock within 10% of that level, closest first (no row limit), and an **Excluded & no price** table. Change `NEAR52` / `MORE_CAP` at the top of the script to adjust.
 - Each stock is listed once on the Act tab, under its most urgent reason (in the order above); its tags show every reason that applies.
 
 ## Privacy
@@ -65,9 +66,9 @@ Rows with `Include = FALSE` are listed under *More → Data health*. Included ro
 
 | Symptom | Fix |
 |---|---|
-| "Failed to fetch" / banner says offline or blocked | Check the link under *More → Data source settings*; make sure the sheet is published as **CSV**, not as a web page. As a fallback, load the CSV files from the phone in the same settings sheet. |
+| "Failed to fetch" / banner says offline or blocked | Check the link under *Alerts → Data source settings*; make sure the sheet is published as **CSV**, not as a web page. As a fallback, load the CSV files from the phone in the same settings sheet. |
 | Numbers look old | Tap ⟳. Google refreshes published sheets only every few minutes, and `GOOGLEFINANCE` prices can lag. |
-| A stock is missing | Check whether `Include` is `FALSE` or its row has an empty or `#N/A` price in `data.csv`. See *More → Data health*. |
+| A stock is missing | Check whether `Include` is `0`/`FALSE`, or its row has an empty or `#N/A` price. Both are listed in the *Excluded & no price* table on Home. |
 | Alert never fires | Trigger of `0` is ignored, and alert tickers must match `data.csv` exactly. |
 
 ## Local testing

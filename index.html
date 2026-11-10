@@ -79,9 +79,11 @@ h2 .n{background:var(--ink);color:var(--bg);border-radius:999px;font-size:12px;p
 .empty{text-align:center;color:var(--mute);padding:28px 10px}
 
 /* loss vs 52W table */
-.tbl .tr{display:grid;grid-template-columns:1.1fr 1fr 1.1fr 1.1fr;gap:6px;padding:8px 0;border-top:1px solid var(--line);align-items:start;font-size:13px}
+.tbl .tr{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1.3fr) minmax(0,1.1fr) minmax(0,1.05fr);gap:6px;padding:8px 0;border-top:1px solid var(--line);align-items:start;font-size:13px}
 .tbl .tr.th{border-top:0;font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;padding:4px 0}
+.tbl .tr>div>b{overflow-wrap:anywhere}
 .tbl small{display:block;font-size:11.5px;color:var(--mute);margin-top:1px}
+.tbl small.warn{color:var(--warn);font-weight:600}
 .tbl small.up{color:var(--up);font-weight:600}
 .tbl small.dn{color:var(--dn);font-weight:600}
 .tbl .up b{color:var(--up)}.tbl .dn b{color:var(--dn)}
@@ -135,10 +137,10 @@ nav .badge{position:absolute;margin-left:6px;background:var(--dn);color:#fff;bor
 </div>
 
 <nav>
-  <button data-tab="act"><span>⚡</span>Act<i class="badge" id="bAct" hidden></i></button>
+  <button data-tab="home"><span>🏠</span>Home</button>
   <button data-tab="hold"><span>📋</span>Holdings</button>
+  <button data-tab="act"><span>⚡</span>Act<i class="badge" id="bAct" hidden></i></button>
   <button data-tab="alerts"><span>🔔</span>Alerts</button>
-  <button data-tab="more"><span>📊</span>More</button>
 </nav>
 
 <div id="setup">
@@ -162,15 +164,16 @@ nav .badge{position:absolute;margin-left:6px;background:var(--dn);color:#fff;bor
 <script>
 /* If your page is private you may paste the two links here; otherwise use the in-app setup (safer on a public repo). */
 const DEFAULT_URLS = { data: "", alerts: "" };
-const NEAR52 = 10;     // More tab: list stocks within this % of their 52-week high / low
-const MORE_CAP = 25;   // More tab: max rows per list
+const INCLUDE_COL = 'Include';          // optional data.csv column: FALSE / No / 0 / N = leave this row out of the analysis
+const NEAR52 = 10;     // Home tab: list stocks within this % of their 52-week high / low
+const MORE_CAP = 25;   // Home tab: max rows for Top gainers / Top losers (52-week lists are not capped)
 
 const LS = {
   get(k){ try{ return localStorage.getItem(k) }catch(e){ return null } },
   set(k,v){ try{ localStorage.setItem(k,v) }catch(e){} }
 };
-const state = { stocks:[], alerts:[], tab:'act', filter:'all', q:'', sort:'name', fetchedAt:null, note:'', skipped:0, excluded:[], orphanAlerts:0, expanded:new Set(), showAll:{} };
-state.openMore = (()=>{ try{ const v=JSON.parse(LS.get('open_more')||'null'); if(Array.isArray(v)) return new Set(v); }catch(e){} return new Set(['m_gain','m_loss','m_high','m_low']); })();
+const state = { stocks:[], alerts:[], tab:'home', filter:'all', q:'', sort:'name', fetchedAt:null, note:'', skipped:0, orphanAlerts:0, expanded:new Set(), showAll:{} };
+state.closedMore = (()=>{ try{ const v=JSON.parse(LS.get('closed_more')||'null'); if(Array.isArray(v)) return new Set(v); }catch(e){} return new Set(); })();
 state.openSecs = (()=>{ try{ const v=JSON.parse(LS.get('open_secs')||'null'); if(Array.isArray(v)) return new Set(v); }catch(e){} return new Set(['trig','sell']); })();
 
 /* ---------- helpers ---------- */
@@ -237,7 +240,7 @@ async function _load(){
   }catch(e){
     const cd = LS.get('cache_data');
     if(cd){ state.fetchedAt = +LS.get('cache_time')||null; state.note='Offline or blocked — showing last saved data. ('+e.message+')'; ingest(cd, LS.get('cache_alerts')); finish(); }
-    else { setStatus('Could not load data.'); state.note = e.message===EDIT_MSG ? EDIT_MSG : 'Could not load data ('+e.message+'). Check your link under More → Data source settings, or load a CSV file from your phone there.'; openSetup(); render(); }
+    else { setStatus('Could not load data.'); state.note = e.message===EDIT_MSG ? EDIT_MSG : 'Could not load data ('+e.message+'). Check your link under Alerts → Data source settings, or load a CSV file from your phone there.'; openSetup(); render(); }
   }
 }
 
@@ -246,16 +249,26 @@ function ingest(dataText, alertsText){
   const alertRows = alertsText ? parseCSV(alertsText) : [];
   const amap = {};
   alertRows.forEach(a=>{ amap[a.TICKER] = { buy:num(a['Buy Trigger Price'])||0, sell:num(a['Sell Trigger Price'])||0, lastAction:a['Last Action']||'', lastPrice:num(a['Last Price'])||0, date:a.Date||'' }; });
-  let skipped=0; const stocks=[], excluded=[], dataTickers=new Set(); const problems=[];
+  let skipped=0; const stocks=[], hidden=[], excluded=[], problems=[], extras=[];
+  const incKey = rows.length ? Object.keys(rows[0]).find(k=>k.trim().toLowerCase()===INCLUDE_COL.toLowerCase()) : null;
+  const isOut = r => !!incKey && /^(false|no|n|0|exclude|excluded)$/i.test((r[incKey]||'').trim());   // blank or anything else = included
   const badVal = v => v===undefined || v==='' || /^#|loading/i.test(v) || num(v)===null;
   rows.forEach(r=>{
-    if(r.TICKER) dataTickers.add(r.TICKER);
-    if(/^(false|no|n|0)$/i.test(r.Include||'')){ excluded.push(r.TICKER||'(unnamed row)'); return; }
+    const out = isOut(r);
+    if(out) excluded.push(r.TICKER||'(unnamed row)');
     const cmp=num(r.CMP);
-    if(!r.TICKER || cmp===null || cmp<=0){ skipped++; problems.push({t:r.TICKER||'(unnamed row)', fields:['CMP'], skipped:true}); return; }
-    const miss=['HIGH52','LOW52','CLOSEYEST','CHANGE','CHANGEPCT'].filter(k=>badVal(r[k]));
-    if((num(r.Quantity)||0)>0 && badVal(r['Avg Cost Price'])) miss.push('Avg Cost Price');
-    if(miss.length) problems.push({t:r.TICKER, fields:miss, skipped:false});
+    const noPrice = !r.TICKER || cmp===null || cmp<=0;
+    if(out || noPrice){
+      const hi0=num(r.HIGH52), lo0=num(r.LOW52);
+      extras.push({ t:r.TICKER||'(unnamed row)', out, noPrice, qty:num(r.Quantity)||0, avg:num(r['Avg Cost Price'])||0, cmp:noPrice?null:cmp, hi:hi0>0?hi0:null, lo:lo0>0?lo0:null,
+        fromHigh:(!noPrice&&hi0>0)?Math.min(0,(cmp-hi0)/hi0*100):null, fromLow:(!noPrice&&lo0>0)?Math.max(0,(cmp-lo0)/lo0*100):null });
+    }
+    if(noPrice){ if(!out){ skipped++; problems.push({t:r.TICKER||'(unnamed row)', fields:['CMP'], skipped:true}); } return; }
+    if(!out){
+      const miss=['HIGH52','LOW52','CLOSEYEST','CHANGE','CHANGEPCT'].filter(k=>badVal(r[k]));
+      if((num(r.Quantity)||0)>0 && badVal(r['Avg Cost Price'])) miss.push('Avg Cost Price');
+      if(miss.length) problems.push({t:r.TICKER, fields:miss, skipped:false});
+    }
     const qty=num(r.Quantity)||0, avg=num(r['Avg Cost Price'])||0;
     const value=qty*cmp, cost=qty*avg;
     const pnl = num(r['Profit/Loss']) ?? (value-cost);
@@ -274,23 +287,26 @@ function ingest(dataText, alertsText){
     s.fromHigh = hi>0 ? Math.min(0,(cmp-hi)/hi*100) : null;   // 0 or negative: how far below the 52W high
     s.fromLow  = lo>0 ? Math.max(0,(cmp-lo)/lo*100) : null;   // 0 or positive: how far above the 52W low
     s.rangePos = hi>lo ? Math.min(100,Math.max(0,(cmp-lo)/(hi-lo)*100)) : 50;
-    stocks.push(s);
+    (out?hidden:stocks).push(s);
   });
-  const orphans = alertRows.filter(a=>a.TICKER && !dataTickers.has(a.TICKER) && ((num(a['Buy Trigger Price'])||0)>0 || (num(a['Sell Trigger Price'])||0)>0)).map(a=>a.TICKER);
+  const have = new Set(rows.map(r=>r.TICKER).filter(Boolean));   // excluded tickers are not "missing" — their alerts are simply ignored
+  const orphans = alertRows.filter(a=>a.TICKER && !have.has(a.TICKER) && ((num(a['Buy Trigger Price'])||0)>0 || (num(a['Sell Trigger Price'])||0)>0)).map(a=>a.TICKER);
   state.orphanAlerts = orphans.length; state.orphanList=orphans; state.problems=problems;
-  state.stocks=stocks; state.skipped=skipped; state.excluded=excluded; state.alerts=alertRows;
+  state.stocks=stocks; state.hidden=hidden; state.excluded=excluded; state.extras=extras; state.skipped=skipped; state.alerts=alertRows;
 }
 
 function finish(){
   const t = state.fetchedAt ? new Date(state.fetchedAt).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : 'unknown';
-  setStatus(`${state.stocks.length} stocks · fetched ${t}`);
+  setStatus(`${state.stocks.length} stocks${(state.excluded||[]).length?` · ${state.excluded.length} excluded`:''} · fetched ${t}`);
   render();
 }
 function setStatus(t){ document.getElementById('status').textContent=t; }
 
 /* ---------- computed ---------- */
+// Full portfolio = included + excluded holdings. Used ONLY for the header totals and the risk split; every list/table/signal uses state.stocks (included only).
+function totalsPool(){ return state.stocks.concat(state.hidden||[]); }
 function totals(){
-  const held = state.stocks.filter(s=>s.held);
+  const held = totalsPool().filter(s=>s.held);
   const value = held.reduce((a,s)=>a+s.value,0), cost = held.reduce((a,s)=>a+s.cost,0);
   const pnl = held.reduce((a,s)=>a+s.pnl,0), day = held.reduce((a,s)=>a+s.day,0);
   const prev = value-day;
@@ -334,6 +350,7 @@ function w52(s){
   const t=[a,b].filter(Boolean).join(' · ');
   return t ? `<div class="mute num" style="margin-top:4px;font-size:12px">${t}</div>` : '';
 }
+const posLines = s => s.held ? `<small>Avg price ${s.avg>0?px(s.avg):'-'}</small><small>${s.qty} shares</small>` : '';
 function gf(s){ return `https://www.google.com/finance/quote/${encodeURIComponent(s.t)}:${/^\d+$/.test(s.t)?'BOM':'NSE'}`; }
 function row(s,kind){
   const open = state.expanded.has(s.t);
@@ -341,7 +358,7 @@ function row(s,kind){
   return `<div class="row ${kind||''} ${open?'open':''}" data-t="${esc(s.t)}">
     <div class="r1">
       <div style="min-width:0"><div class="tk">${esc(s.t)}</div><div class="nm">${esc(s.name)}</div></div>
-      <div class="px num"><b>${px(s.cmp)}</b><small>Avg price ${s.avg>0?px(s.avg):'–'}</small><small>${s.qty} shares</small><span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div>
+      <div class="px num"><b>${px(s.cmp)}</b>${posLines(s)}<span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div>
     </div>
     <div style="margin-top:6px;font-size:13px">${sub}</div>
     ${w52(s)}
@@ -406,6 +423,9 @@ function renderHold(){
 }
 
 function renderAlerts(){
+  return alertsBody() + `<button class="btn alt" id="openSetup" style="margin-top:16px">⚙ Data source settings</button>`;
+}
+function alertsBody(){
   const items = state.stocks.filter(s=>s.al && (s.al.buy>0||s.al.sell>0)).map(s=>{
     const dBuy = s.al.buy>0 ? (s.cmp-s.al.buy)/s.cmp*100 : null;   // >0 means still above buy trigger
     const dSell = s.al.sell>0 ? (s.al.sell-s.cmp)/s.cmp*100 : null; // >0 means still below sell trigger
@@ -419,13 +439,13 @@ function renderAlerts(){
     if(dSell!==null) lines.push(s.sellHit?`<span class="tag sell hit">SELL hit · now ${px(s.cmp)} ≥ ${px(s.al.sell)}</span>`:`<span class="tag sell">Sell ≥ ${px(s.al.sell)} · ${dSell.toFixed(1)}% to rise</span>`);
     const last = (s.al.lastAction && !/^ignore$/i.test(s.al.lastAction) ? `<span class="tag">Last: ${esc(s.al.lastAction)} @ ${px(s.al.lastPrice)}</span>` : '') + (s.al.date ? `<span class="tag">Alert dated ${esc(s.al.date)}</span>` : '');
     return `<div class="row ${hit?(s.sellHit?'sell':'buy'):''}"><div class="r1"><div><div class="tk">${esc(s.t)}</div><div class="nm">${esc(s.name)}</div></div>
-      <div class="px num"><b>${px(s.cmp)}</b><small>Avg price ${s.avg>0?px(s.avg):'–'}</small><small>${s.qty} shares</small><span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div></div>
+      <div class="px num"><b>${px(s.cmp)}</b>${posLines(s)}<span class="${cls(s.pct)}">${arrow(s.pct)} ${pc(s.pct)}</span></div></div>
       <div>${lines.join('')}${last}</div></div>`;
   }).join('');
 }
 
 function moreSection(k,title,total,bodyHtml){
-  const open=state.openMore.has(k);
+  const open=!state.closedMore.has(k);
   return `<h2 class="sec" data-msec="${k}" role="button" tabindex="0" aria-expanded="${open}"><span class="chev">${open?'▾':'▸'}</span>${title} <span class="n">${total}</span></h2>`+(open?bodyHtml:'');
 }
 function capNote(total){ return total>MORE_CAP ? `<div class="mute" style="font-size:12px;margin-top:8px">Showing ${MORE_CAP} of ${total}</div>` : ''; }
@@ -433,7 +453,7 @@ function moverTable(list,emptyMsg){
   if(!list.length) return `<div class="row tbl"><div class="mute">${emptyMsg}</div></div>`;
   const r=s=>`<div class="tr">
       <div><b>${esc(s.t)}</b><small>${s.qty} sh</small></div>
-      <div class="num"><b>${px(s.cmp)}</b><small>Avg price ${s.avg>0?px(s.avg):'–'}</small></div>
+      <div class="num"><b>${px(s.cmp)}</b><small>Avg ${s.avg>0?px(s.avg):'-'}</small></div>
       <div class="num ${cls(s.pct)}"><b>${arrow(s.pct)} ${pc(s.pct)}</b><small class="${cls(s.day)}">${money(s.day)}</small></div>
       <div class="num ${cls(s.pnl)}"><b>${pc(s.pnlPct)}</b><small class="${cls(s.pnl)}">${money(s.pnl)}</small></div>
     </div>`;
@@ -443,39 +463,50 @@ function rangeTable(list,mode){
   const word=mode==='high'?'high':'low';
   if(!list.length) return `<div class="row tbl"><div class="mute">None within ${NEAR52}% of their 52-week ${word}.</div></div>`;
   const r=s=>`<div class="tr">
-      <div><b>${esc(s.t)}</b><small>${s.qty} sh</small>${s.held?`<small class="${cls(s.pnl)}">${pc(s.pnlPct)}</small>`:'<small>watchlist</small>'}</div>
-      <div class="num"><b>${px(s.cmp)}</b><small>Avg price ${s.avg>0?px(s.avg):'–'}</small></div>
+      <div><b>${esc(s.t)}</b>${s.held?`<small>${s.qty} sh</small><small class="${cls(s.pnl)}">${pc(s.pnlPct)}</small>`:'<small>watchlist</small>'}</div>
+      <div class="num"><b>${px(s.cmp)}</b>${s.held?`<small>Avg ${s.avg>0?px(s.avg):'-'}</small>`:''}</div>
       <div class="num ${mode==='low'?'hl low':''}">${s.lo?px(s.lo):'–'}<small>${s.fromLow===null?'':(s.fromLow<0.05?'at low':'+'+s.fromLow.toFixed(1)+'%')}</small></div>
       <div class="num ${mode==='high'?'hl high':''}">${s.hi?px(s.hi):'–'}<small>${s.fromHigh===null?'':(s.fromHigh>-0.05?'at high':s.fromHigh.toFixed(1)+'%')}</small></div>
     </div>`;
   return `<div class="row tbl"><div class="mute" style="font-size:12px;margin-bottom:6px">Within ${NEAR52}% of the 52-week ${word}, closest first. P/L % under each ticker.</div>
-    <div class="tr th"><div>Stock / shares</div><div>CMP / avg</div><div>52W low</div><div>52W high</div></div>${list.slice(0,MORE_CAP).map(r).join('')}${capNote(list.length)}</div>`;
+    <div class="tr th"><div>Stock / shares</div><div>CMP / avg</div><div>52W low</div><div>52W high</div></div>${list.map(r).join('')}</div>`;
 }
-function renderMore(){
+function extraTable(list){
+  if(!list.length) return `<div class="row tbl"><div class="mute">No excluded stocks and no missing prices.</div></div>`;
+  const D='-';
+  const r=x=>`<div class="tr">
+      <div><b>${esc(x.t)}</b>${x.qty>0?`<small>${x.qty} sh</small>`:''}<small class="${x.noPrice?'warn':''}">${[x.out?'excluded':'',x.noPrice?'no price':''].filter(Boolean).join(' · ')}</small></div>
+      <div class="num"><b>${x.cmp===null?D:px(x.cmp)}</b>${x.qty>0?`<small>Avg ${x.avg>0?px(x.avg):D}</small>`:''}</div>
+      <div class="num">${x.lo===null?D:px(x.lo)}<small>${x.fromLow===null?D:(x.fromLow<0.05?'at low':'+'+x.fromLow.toFixed(1)+'%')}</small></div>
+      <div class="num">${x.hi===null?D:px(x.hi)}<small>${x.fromHigh===null?D:(x.fromHigh>-0.05?'at high':x.fromHigh.toFixed(1)+'%')}</small></div>
+    </div>`;
+  return `<div class="row tbl"><div class="mute" style="font-size:12px;margin-bottom:6px">Rows with ${esc(INCLUDE_COL)} = 0/FALSE are left out of every list and signal, but their holdings still count in the header total and risk split. Rows with no price can't be valued. “-” = not available.</div>
+    <div class="tr th"><div>Stock / shares</div><div>CMP / avg</div><div>52W low</div><div>52W high</div></div>${list.map(r).join('')}</div>`;
+}
+function renderHome(){
   const S=state.stocks, held=S.filter(s=>s.held);
-  const risk={SAFE:0,RISK:0}; held.forEach(s=>{ if(s.level==='RISK') risk.RISK+=s.value; else risk.SAFE+=s.value; });
+  const risk={SAFE:0,RISK:0}; totalsPool().filter(s=>s.held).forEach(s=>{ if(s.level==='RISK') risk.RISK+=s.value; else risk.SAFE+=s.value; });   // same pool as the header total
   const gain=held.filter(s=>s.pct>0).sort((a,b)=>b.pct-a.pct);
   const loss=held.filter(s=>s.pct<0).sort((a,b)=>a.pct-b.pct);
   const nearHi=S.filter(s=>s.fromHigh!==null && s.fromHigh>=-NEAR52).sort((a,b)=>b.fromHigh-a.fromHigh);
   const nearLo=S.filter(s=>s.fromLow!==null && s.fromLow<=NEAR52).sort((a,b)=>a.fromLow-b.fromLow);
+  const extras=[...(state.extras||[])].sort((a,b)=>(b.noPrice-a.noPrice)||a.t.localeCompare(b.t));   // no-price rows first
   const bars = (arr,total)=>arr.map(([k,v])=>`<div style="margin:10px 0"><div class="r1"><span>${esc(k)}</span><span class="num">${(v/total*100).toFixed(1)}% · ${money(v)}</span></div><div class="bar"><i style="width:${v/total*100}%"></i></div></div>`).join('');
   const rt=risk.SAFE+risk.RISK||1;
   const sk=(state.problems||[]).filter(x=>x.skipped), part=(state.problems||[]).filter(x=>!x.skipped);
-  const excluded=state.excluded||[];
-  const health = (!sk.length && !part.length && !excluded.length && !state.orphanAlerts)
-    ? '✅ All rows look complete.'
-    : [ excluded.length ? `<div>Excluded from analysis/listing (<b>${excluded.length}</b>):<br><b>${excluded.map(esc).join(', ')}</b></div>` : '',
-        sk.length ? `<div style="margin-top:8px">Skipped — no usable price (<b>${sk.length}</b>):<br><b>${sk.map(x=>esc(x.t)).join(', ')}</b></div>` : '',
-        part.length ? `<div style="margin-top:8px">Missing some fields (<b>${part.length}</b>):<br>${part.map(x=>`<b>${esc(x.t)}</b> <span class="mute">(${x.fields.map(esc).join(', ')})</span>`).join('<br>')}</div>` : '',
-        state.orphanAlerts ? `<div style="margin-top:8px">Alert triggers with no matching stock in data.csv (<b>${state.orphanAlerts}</b>):<br><b>${state.orphanList.map(esc).join(', ')}</b></div>` : ''
-      ].join('');
+  const hp=[
+    sk.length ? `<div>No usable price (<b>${sk.length}</b>) — listed in the “Excluded &amp; no price” table above.</div>` : '',
+    part.length ? `<div>Missing some fields (<b>${part.length}</b>):<br>${part.map(x=>`<b>${esc(x.t)}</b> <span class="mute">(${x.fields.map(esc).join(', ')})</span>`).join('<br>')}</div>` : '',
+    state.orphanAlerts ? `<div>Alert triggers with no matching stock in data.csv (<b>${state.orphanAlerts}</b>):<br><b>${state.orphanList.map(esc).join(', ')}</b></div>` : ''
+  ].filter(Boolean);
+  const health = hp.length ? hp.join('<div style="height:8px"></div>') : '✅ All rows look complete.';
   return moreSection('m_gain','📈 Top gainers today (held)',gain.length,moverTable(gain,'No holdings are up today.'))
     + moreSection('m_loss','📉 Top losers today (held)',loss.length,moverTable(loss,'No holdings are down today.'))
     + moreSection('m_high','🔺 52-week high · within '+NEAR52+'%',nearHi.length,rangeTable(nearHi,'high'))
     + moreSection('m_low','🔻 52-week low · within '+NEAR52+'%',nearLo.length,rangeTable(nearLo,'low'))
+    + moreSection('m_ex','🚫 Excluded &amp; no price',extras.length,extraTable(extras))
     + `<h2>Risk split</h2><div class="row">${bars([['SAFE',risk.SAFE],['RISK',risk.RISK]],rt)}</div>
-    <h2>Data health</h2><div class="row" style="font-size:13px">${health}</div>
-    <button class="btn alt" id="openSetup">⚙ Data source settings</button>`;
+    <h2>Data health</h2><div class="row" style="font-size:13px">${health}</div>`;
 }
 
 function renderHero(){
@@ -494,7 +525,7 @@ function render(){
   document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===state.tab));
   const v=document.getElementById('view');
   const keepScroll = window.scrollY;
-  v.innerHTML = state.tab==='act'?renderAct(): state.tab==='hold'?renderHold(): state.tab==='alerts'?renderAlerts(): renderMore();
+  v.innerHTML = state.tab==='home'?renderHome(): state.tab==='hold'?renderHold(): state.tab==='act'?renderAct(): renderAlerts();
   const sel=document.getElementById('sort'); if(sel) sel.value=state.sort;
   window.scrollTo(0,keepScroll);
 }
@@ -504,7 +535,7 @@ document.addEventListener('click',e=>{
   const nb=e.target.closest('nav button'); if(nb){ state.tab=nb.dataset.tab; render(); window.scrollTo(0,0); return; }
   const f=e.target.closest('[data-f]'); if(f){ state.filter=f.dataset.f; render(); return; }
   const sh=e.target.closest('[data-sec]'); if(sh){ const k=sh.dataset.sec; state.openSecs.has(k)?state.openSecs.delete(k):state.openSecs.add(k); LS.set('open_secs',JSON.stringify([...state.openSecs])); render(); return; }
-  const ms=e.target.closest('[data-msec]'); if(ms){ const k=ms.dataset.msec; state.openMore.has(k)?state.openMore.delete(k):state.openMore.add(k); LS.set('open_more',JSON.stringify([...state.openMore])); render(); return; }
+  const ms=e.target.closest('[data-msec]'); if(ms){ const k=ms.dataset.msec; state.closedMore.has(k)?state.closedMore.delete(k):state.closedMore.add(k); LS.set('closed_more',JSON.stringify([...state.closedMore])); render(); return; }
   const m=e.target.closest('[data-more]'); if(m){ state.showAll[m.dataset.more]=true; render(); return; }
   if(e.target.closest('a')) return;
   const r=e.target.closest('.row[data-t]'); if(r){ const t=r.dataset.t; state.expanded.has(t)?state.expanded.delete(t):state.expanded.add(t); r.classList.toggle('open'); return; }
